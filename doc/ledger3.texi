@@ -9384,15 +9384,33 @@ contains @samp{Assets}, and @samp{commodity !~ /€/} matches postings
 whose commodity isn't the euro.
 @item ==~
 Regular expression extract.  Like @code{=~}, but instead of returning
-a boolean it returns the matched text as a string, making the content
-of capture groups accessible as value expressions.  If the regex
-contains capture groups, the text of the first group is returned;
-otherwise the entire match is returned.  Returns false when the regex
-does not match.  For example, @samp{account ==~ /(.+):(.+)/} returns
-the text matched by the first capture group (everything before the last
-colon), and @samp{account ==~ /Expenses.*/} returns the full matched
-substring.  Since non-empty strings are truthy, @code{==~} also works
-in boolean contexts such as @option{--limit}.
+a boolean it returns the matched text, making the content of capture
+groups accessible as value expressions.  The exact return type depends
+on whether the pattern contains capture groups:
+
+@itemize @bullet
+@item If the pattern has @emph{no} capture groups, the result is a
+single string containing the entire matched substring.
+@item If the pattern has @emph{one or more} capture groups, the result
+is a sequence containing the text of every capture group (even when
+there is only one), in left-to-right order.  Optional groups that did
+not participate in the match are represented as empty strings.
+@item If the pattern does not match, the result is @code{false}.
+@end itemize
+
+For example, @samp{account ==~ /Expenses.*/} returns the entire
+matched substring (a string), while @samp{account ==~ /(.+):(.+)/}
+returns a two-element sequence of the text before and after the last
+colon.  Individual elements of the sequence can be pulled out with
+@code{get_at}:
+
+@smallexample
+$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 0))\n'
+@end smallexample
+
+The @code{==~} operator is also usable in boolean contexts such as
+@option{--limit}: non-empty strings and non-empty sequences are
+truthy, while the @code{false} returned on non-match is falsy.
 @item and
 @itemx &
 Logical AND -- both sides must be true.
@@ -9527,21 +9545,31 @@ A regular expression that matches against the transaction code (the
 text that occurs between parentheses before the payee).
 
 @item expr account ==~ /REGEX/
-Like @code{=~}, but returns the matched text as a string instead of a
-boolean, making the content of capture groups accessible as value
-expressions.  When the regex contains capture groups, the first
-group's text is returned; otherwise the entire match is returned.
-Returns false on non-match.  For example,
-@samp{account ==~ /Expenses:(.*)/} returns the sub-account name
-after @samp{Expenses:}.  This is useful in format strings:
+Like @code{=~}, but returns the matched text instead of a boolean,
+making the content of capture groups accessible as value expressions.
+When the regex contains capture groups the result is a sequence
+containing the text of every capture group; when the regex contains
+no capture groups the result is a single string equal to the entire
+match.  Returns false on non-match.
+
+For example, @samp{account ==~ /Expenses:(.*)/} returns a one-element
+sequence holding the sub-account name after @samp{Expenses:}, and
+@samp{account ==~ /Expenses/} returns the plain string
+@samp{Expenses}.  This is useful in format strings:
 
 @smallexample
 $ ledger reg --format '%(account ==~ /(.+):(.+)/)\n'
 @end smallexample
 
-prints the first capture group for each posting's account.  Since
-non-empty strings are truthy, @code{==~} also works in boolean
-contexts:
+prints both capture groups as a sequence for each posting's account.
+Use @code{get_at(EXPR, N)} to pull out an individual group:
+
+@smallexample
+$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 1))\n'
+@end smallexample
+
+Since non-empty strings and sequences are truthy, @code{==~} also
+works in boolean contexts:
 
 @smallexample
 $ ledger reg --limit 'account ==~ /Expenses:(.*)/'

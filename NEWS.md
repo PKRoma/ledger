@@ -34,6 +34,11 @@
 
 - Add commodity swaps feature over a base commodity
 
+- Add `==~` operator for regex capture group extraction (issue #664).
+  Without capture groups the operator yields the entire match as a
+  string; with capture groups it yields a sequence of every captured
+  group.  Returns `false` on non-match.
+
 - Add --align-intervals option for reporting
 
 - Add --lisp-date-format option for lisp output (bug #1206)
