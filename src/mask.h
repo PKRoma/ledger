@@ -153,6 +153,16 @@ public:
   /// Returns boost::none if the regex does not match or the group is unmatched.
   boost::optional<string> match_group(string_view text, std::size_t n = 1) const;
 
+  /// Match against @p text and return every matched substring.
+  ///
+  /// On a successful match the returned vector has `mark_count() + 1`
+  /// elements: index 0 is the entire match (same as `match_group(text, 0)`),
+  /// indices 1..N are the captured groups.  An optional group that did not
+  /// participate in the match is represented as an empty string.
+  ///
+  /// Returns boost::none if the regex does not match.
+  boost::optional<std::vector<string>> match_groups(string_view text) const;
+
   bool empty() const { return expr.empty(); } ///< True if no pattern has been assigned
 
   /// Return the regex pattern as a UTF-8 string.
