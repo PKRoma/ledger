@@ -466,16 +466,19 @@ value_t expr_t::op_t::calc(scope_t& scope, ptr_op_t* locus, const int depth) {
       value_t mask_val = right()->calc(scope, locus, depth + 1);
       const mask_t& m = mask_val.as_mask();
       string text = left()->calc(scope, locus, depth + 1).to_string();
-      if (m.mark_count() > 0) {
-        if (auto captured = m.match_group(text, 1))
-          result = string_value(*captured);
-        else
-          result = false;
+      auto matches = m.match_groups(text);
+      if (!matches) {
+        result = false;
+      } else if (m.mark_count() == 0) {
+        // No capture groups: yield the entire match as a single string.
+        result = string_value((*matches)[0]);
       } else {
-        if (auto captured = m.match_group(text, 0))
-          result = string_value(*captured);
-        else
-          result = false;
+        // One or more capture groups: yield a sequence of the captures,
+        // omitting index 0 (the whole match).
+        value_t::sequence_t captures;
+        for (std::size_t i = 1; i < matches->size(); ++i)
+          captures.push_back(new value_t(string_value((*matches)[i])));
+        result = value_t(captures);
       }
       break;
     }

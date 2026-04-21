@@ -1,40 +1,167 @@
 ; Regression test for issue #664: The ==~ operator extracts regex
-; match text instead of returning a boolean.
+; match text.  With capture groups it returns a sequence of all
+; captured groups; without capture groups it returns the entire
+; match as a single string; on non-match it returns false.
 ; https://github.com/ledger/ledger/issues/664
 
 2024/01/01 Test Payee
     Expenses:Food:Groceries    $10.00
     Assets:Cash
 
-; The ==~ operator with capture groups returns the first captured
-; group as a string.
-test reg --format '%(account ==~ /(.+):(.+)/)\n'
-Expenses:Food
-Assets
-end test
+; ---------------------------------------------------------------
+; Basic return-type tests
+; ---------------------------------------------------------------
 
-; The ==~ operator without capture groups returns the entire match
-; as a string.
+; Without capture groups, ==~ returns the entire match as a string.
 test reg --format '%(account ==~ /.+:.+/)\n'
 Expenses:Food:Groceries
 Assets:Cash
 end test
 
-; The ==~ operator returns false when the pattern does not match.
-test reg --format '%(account ==~ /(xyz)/)\n'
+; With a single capture group, ==~ returns a sequence of one string.
+test reg --format '%(account ==~ /(\w+)/)\n'
+(Expenses)
+(Assets)
+end test
+
+; With two capture groups, ==~ returns a sequence of both groups.
+test reg --format '%(account ==~ /(\w+):(\w+)/)\n'
+(Expenses, Food)
+(Assets, Cash)
+end test
+
+; With three capture groups, ==~ returns a sequence of all three (or
+; false when the regex does not match).
+test reg --format '%(account ==~ /(\w+):(\w+):(\w+)/)\n'
+(Expenses, Food, Groceries)
+false
+end test
+
+; ---------------------------------------------------------------
+; Non-match returns false
+; ---------------------------------------------------------------
+
+; No match, no capture groups -- returns false.
+test reg --format '%(account ==~ /xyz/)\n'
 false
 false
 end test
 
-; The =~ operator always returns a boolean, even with capture groups.
+; No match, with capture groups -- also returns false.
+test reg --format '%(account ==~ /(xyz)(abc)/)\n'
+false
+false
+end test
+
+; ---------------------------------------------------------------
+; is_seq discriminates between no-groups (string) and groups (sequence)
+; ---------------------------------------------------------------
+
+; No-groups form yields a string, not a sequence.
+test reg --format '%(is_seq(account ==~ /.+:.+/))\n'
+false
+false
+end test
+
+; Any-groups form yields a sequence, even with just one group.
+test reg --format '%(is_seq(account ==~ /(\w+)/))\n'
+true
+true
+end test
+
+; Non-match returns boolean false, which is not a sequence.
+test reg --format '%(is_seq(account ==~ /nomatch/))\n'
+false
+false
+end test
+
+; ---------------------------------------------------------------
+; Indexed access with get_at(seq, N)
+; ---------------------------------------------------------------
+
+; Access the first captured group.
+test reg --format '%(get_at(account ==~ /(\w+):(\w+)/, 0))\n'
+Expenses
+Assets
+end test
+
+; Access the second captured group.
+test reg --format '%(get_at(account ==~ /(\w+):(\w+)/, 1))\n'
+Food
+Cash
+end test
+
+; Access a group that exists for one posting but not the other.
+test reg --format '%(get_at(account ==~ /(\w+):(\w+):(\w+)/, 2) || "<none>")\n'
+Groceries
+<none>
+end test
+
+; ---------------------------------------------------------------
+; Partial / anchored matches
+; ---------------------------------------------------------------
+
+; Anchored full-line match with groups.
+test reg --format '%(account ==~ /^(\w+):(\w+):(\w+)$/)\n'
+(Expenses, Food, Groceries)
+false
+end test
+
+; Partial match returns only the matched portion as the whole match.
+test reg --format '%(account ==~ /Food/)\n'
+Food
+false
+end test
+
+; Partial match with groups returns only those groups inside the match.
+test reg --format '%(account ==~ /(Food):(\w+)/)\n'
+(Food, Groceries)
+false
+end test
+
+; ---------------------------------------------------------------
+; Boolean context
+; ---------------------------------------------------------------
+
+; The ==~ operator works in --limit (non-empty string and non-empty
+; sequence are truthy; false is falsy).
+test reg --limit 'account ==~ /(\w+):(\w+):(\w+)/' --format '%(account)\n'
+Expenses:Food:Groceries
+end test
+
+; Non-group form in --limit also filters correctly.
+test reg --limit 'account ==~ /Cash/' --format '%(account)\n'
+Assets:Cash
+end test
+
+; ---------------------------------------------------------------
+; Contrast with =~ (which always returns bool)
+; ---------------------------------------------------------------
+
+; The =~ operator always returns a boolean, regardless of groups.
 test reg --format '%(account =~ /(.+):(.+)/)\n'
 true
 true
 end test
 
-; The ==~ operator works correctly in boolean context (--limit),
-; since non-empty strings are truthy.
-test reg --limit 'account ==~ /(.+):(.+)/' --format '%(account)\n'
-Expenses:Food:Groceries
-Assets:Cash
+; The =~ operator returns false on non-match.
+test reg --format '%(account =~ /nomatch/)\n'
+false
+false
+end test
+
+; ---------------------------------------------------------------
+; Payee extraction (a common use case from issue #664)
+; ---------------------------------------------------------------
+
+; Extract a structured portion of the payee using groups.
+test reg --format '%(payee ==~ /^(\w+) (\w+)$/)\n'
+(Test, Payee)
+(Test, Payee)
+end test
+
+; Extract just the first word of the payee (single group).
+test reg --format '%(get_at(payee ==~ /^(\w+)/, 0))\n'
+Test
+Test
 end test
