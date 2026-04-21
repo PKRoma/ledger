@@ -1,8 +1,10 @@
 ; Regression test for issue #836: Account aliases should match account name components
 ; https://github.com/ledger/ledger/issues/836
 ;
-; Account aliases should expand when they match ANY component of an account
-; name, not just the first component.
+; With --recursive-aliases, account aliases expand when they match ANY
+; component of an account name, not just the first component.  Without
+; --recursive-aliases, only the first component (or full name) is
+; considered, which is the historical default (see #3132).
 
 alias Food=Healthy:Food
 
@@ -14,9 +16,20 @@ alias Food=Healthy:Food
     Expenses:Food:Groceries    $100.00
     Assets:Cash
 
-test bal
+test bal --recursive-aliases
             $-150.00  Assets:Cash
              $100.00  Expenses:Healthy:Food:Groceries
+              $50.00  Healthy:Food:Groceries
+--------------------
+                   0
+end test
+
+; Default (non-recursive) mode leaves non-leading components alone so
+; that explicit account paths like "Expenses:Food:Groceries" are not
+; rewritten unexpectedly.
+test bal
+            $-150.00  Assets:Cash
+             $100.00  Expenses:Food:Groceries
               $50.00  Healthy:Food:Groceries
 --------------------
                    0
