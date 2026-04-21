@@ -36,8 +36,10 @@
 
 - Add `==~` operator for regex capture group extraction (issue #664).
   Without capture groups the operator yields the entire match as a
-  string; with capture groups it yields a sequence of every captured
-  group.  Returns `false` on non-match.
+  string; with capture groups it yields a sequence whose first element
+  is the entire match followed by every captured group (so a pattern
+  with *N* groups yields a sequence of length *N* + 1).  Returns
+  `false` on non-match.
 
 - Add --align-intervals option for reporting
 

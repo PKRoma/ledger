@@ -1663,20 +1663,26 @@ groups:
 If the pattern has no capture groups, the result is a single string
 containing the entire match.
 If the pattern has one or more capture groups, the result is a
-sequence containing the text of every capture group in left-to-right
-order (even if there is only one group); optional groups that did
-not match are represented as empty strings.
+sequence whose first element is the entire matched substring followed
+by the text of every capture group in left-to-right order (a pattern
+with
+.Em N
+groups yields a sequence of length
+.Em N + 1 ) ;
+optional groups that did not match are represented as empty strings.
 If the pattern does not match, the result is
 .Cm false .
 For example,
 .Dl account ==~ /Expenses.*/
 returns the entire matched substring as a string, while
 .Dl account ==~ /(.+):(.+)/
-returns a two-element sequence of the text before and after the last
-colon.
+returns a three-element sequence: the full match followed by the text
+before and after the last colon.
 Use
 .Cm get_at Ar EXPR , Ar N
-to pull out an individual capture group.
+to pull out an individual element
+(index 0 is the whole match, index 1 is the first capture group, and
+so on).
 Since non-empty strings and sequences are truthy,
 .Cm ==~
 also works in boolean contexts such as

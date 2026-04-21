@@ -9392,20 +9392,23 @@ on whether the pattern contains capture groups:
 @item If the pattern has @emph{no} capture groups, the result is a
 single string containing the entire matched substring.
 @item If the pattern has @emph{one or more} capture groups, the result
-is a sequence containing the text of every capture group (even when
-there is only one), in left-to-right order.  Optional groups that did
-not participate in the match are represented as empty strings.
+is a sequence whose @emph{first} element is the entire matched
+substring, followed by the text of every capture group in
+left-to-right order.  A pattern with @math{N} groups therefore yields
+a sequence of length @math{N + 1}.  Optional groups that did not
+participate in the match are represented as empty strings.
 @item If the pattern does not match, the result is @code{false}.
 @end itemize
 
 For example, @samp{account ==~ /Expenses.*/} returns the entire
 matched substring (a string), while @samp{account ==~ /(.+):(.+)/}
-returns a two-element sequence of the text before and after the last
-colon.  Individual elements of the sequence can be pulled out with
-@code{get_at}:
+returns a three-element sequence: the full match followed by the text
+before and after the last colon.  Individual elements of the sequence
+can be pulled out with @code{get_at}:
 
 @smallexample
-$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 0))\n'
+$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 0))\n'   @c whole match
+$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 1))\n'   @c first group
 @end smallexample
 
 The @code{==~} operator is also usable in boolean contexts such as
@@ -9547,13 +9550,16 @@ text that occurs between parentheses before the payee).
 @item expr account ==~ /REGEX/
 Like @code{=~}, but returns the matched text instead of a boolean,
 making the content of capture groups accessible as value expressions.
-When the regex contains capture groups the result is a sequence
-containing the text of every capture group; when the regex contains
-no capture groups the result is a single string equal to the entire
-match.  Returns false on non-match.
+When the regex contains capture groups the result is a sequence whose
+first element is the entire matched substring followed by the text of
+every capture group (a pattern with @math{N} groups yields a sequence
+of length @math{N + 1}); when the regex contains no capture groups
+the result is a single string equal to the entire match.  Returns
+@code{false} on non-match.
 
-For example, @samp{account ==~ /Expenses:(.*)/} returns a one-element
-sequence holding the sub-account name after @samp{Expenses:}, and
+For example, @samp{account ==~ /Expenses:(.*)/} returns a two-element
+sequence @samp{(Expenses:Food, Food)} -- the full match followed by
+the sub-account captured by the group -- and
 @samp{account ==~ /Expenses/} returns the plain string
 @samp{Expenses}.  This is useful in format strings:
 
@@ -9561,8 +9567,10 @@ sequence holding the sub-account name after @samp{Expenses:}, and
 $ ledger reg --format '%(account ==~ /(.+):(.+)/)\n'
 @end smallexample
 
-prints both capture groups as a sequence for each posting's account.
-Use @code{get_at(EXPR, N)} to pull out an individual group:
+prints the full match and both capture groups as a sequence for each
+posting's account.  Use @code{get_at(EXPR, N)} to pull out an
+individual element (index @code{0} is the whole match, index @code{1}
+the first captured group, and so on):
 
 @smallexample
 $ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 1))\n'

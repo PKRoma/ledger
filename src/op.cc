@@ -473,10 +473,10 @@ value_t expr_t::op_t::calc(scope_t& scope, ptr_op_t* locus, const int depth) {
         // No capture groups: yield the entire match as a single string.
         result = string_value((*matches)[0]);
       } else {
-        // One or more capture groups: yield a sequence of the captures,
-        // omitting index 0 (the whole match).
+        // One or more capture groups: yield a sequence whose first element
+        // is the entire match, followed by every captured group.
         value_t::sequence_t captures;
-        for (std::size_t i = 1; i < matches->size(); ++i)
+        for (std::size_t i = 0; i < matches->size(); ++i)
           captures.push_back(new value_t(string_value((*matches)[i])));
         result = value_t(captures);
       }

@@ -1,7 +1,8 @@
 ; Regression test for issue #664: The ==~ operator extracts regex
-; match text.  With capture groups it returns a sequence of all
-; captured groups; without capture groups it returns the entire
-; match as a single string; on non-match it returns false.
+; match text.  With capture groups it returns a sequence whose first
+; element is the entire match and whose remaining elements are the
+; captured groups (in order); without capture groups it returns the
+; entire match as a single string; on non-match it returns false.
 ; https://github.com/ledger/ledger/issues/664
 
 2024/01/01 Test Payee
@@ -18,22 +19,25 @@ Expenses:Food:Groceries
 Assets:Cash
 end test
 
-; With a single capture group, ==~ returns a sequence of one string.
+; With a single capture group, ==~ returns a 2-element sequence:
+; the entire match followed by the captured group.
 test reg --format '%(account ==~ /(\w+)/)\n'
-(Expenses)
-(Assets)
+(Expenses, Expenses)
+(Assets, Assets)
 end test
 
-; With two capture groups, ==~ returns a sequence of both groups.
+; With two capture groups, ==~ returns a 3-element sequence:
+; the entire match followed by both captured groups.
 test reg --format '%(account ==~ /(\w+):(\w+)/)\n'
-(Expenses, Food)
-(Assets, Cash)
+(Expenses:Food, Expenses, Food)
+(Assets:Cash, Assets, Cash)
 end test
 
-; With three capture groups, ==~ returns a sequence of all three (or
-; false when the regex does not match).
+; With three capture groups, ==~ returns a 4-element sequence
+; (whole match + three groups), or false when the regex does not
+; match.
 test reg --format '%(account ==~ /(\w+):(\w+):(\w+)/)\n'
-(Expenses, Food, Groceries)
+(Expenses:Food:Groceries, Expenses, Food, Groceries)
 false
 end test
 
@@ -79,20 +83,27 @@ end test
 ; Indexed access with get_at(seq, N)
 ; ---------------------------------------------------------------
 
-; Access the first captured group.
+; Index 0 is the entire match.
 test reg --format '%(get_at(account ==~ /(\w+):(\w+)/, 0))\n'
+Expenses:Food
+Assets:Cash
+end test
+
+; Index 1 is the first captured group.
+test reg --format '%(get_at(account ==~ /(\w+):(\w+)/, 1))\n'
 Expenses
 Assets
 end test
 
-; Access the second captured group.
-test reg --format '%(get_at(account ==~ /(\w+):(\w+)/, 1))\n'
+; Index 2 is the second captured group.
+test reg --format '%(get_at(account ==~ /(\w+):(\w+)/, 2))\n'
 Food
 Cash
 end test
 
-; Access a group that exists for one posting but not the other.
-test reg --format '%(get_at(account ==~ /(\w+):(\w+):(\w+)/, 2) || "<none>")\n'
+; Access a deeper group that exists for one posting but not the other
+; (index 3 = third group when all three exist).
+test reg --format '%(get_at(account ==~ /(\w+):(\w+):(\w+)/, 3) || "<none>")\n'
 Groceries
 <none>
 end test
@@ -103,7 +114,7 @@ end test
 
 ; Anchored full-line match with groups.
 test reg --format '%(account ==~ /^(\w+):(\w+):(\w+)$/)\n'
-(Expenses, Food, Groceries)
+(Expenses:Food:Groceries, Expenses, Food, Groceries)
 false
 end test
 
@@ -113,9 +124,10 @@ Food
 false
 end test
 
-; Partial match with groups returns only those groups inside the match.
+; Partial match with groups: the whole-match element covers exactly
+; the matched substring, not the full input.
 test reg --format '%(account ==~ /(Food):(\w+)/)\n'
-(Food, Groceries)
+(Food:Groceries, Food, Groceries)
 false
 end test
 
@@ -156,12 +168,14 @@ end test
 
 ; Extract a structured portion of the payee using groups.
 test reg --format '%(payee ==~ /^(\w+) (\w+)$/)\n'
-(Test, Payee)
-(Test, Payee)
+(Test Payee, Test, Payee)
+(Test Payee, Test, Payee)
 end test
 
-; Extract just the first word of the payee (single group).
-test reg --format '%(get_at(payee ==~ /^(\w+)/, 0))\n'
+; Extract just the first word of the payee via the captured group
+; (index 1 = first group; index 0 would be the whole match, which
+; here happens to be the same string).
+test reg --format '%(get_at(payee ==~ /^(\w+)/, 1))\n'
 Test
 Test
 end test
