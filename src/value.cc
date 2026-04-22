@@ -1647,6 +1647,21 @@ void value_t::in_place_cast(type_t cast_type) {
     }
     break;
 
+  case SEQUENCE:
+    switch (cast_type) {
+    case STRING: {
+      // Render the sequence using the same "(a, b, c)" form as print()
+      // so that to_string() is consistent with streaming output.
+      std::ostringstream buf;
+      print(buf);
+      set_string(buf.str());
+      return;
+    }
+    default:
+      break;
+    }
+    break;
+
   default:
     break;
   }

@@ -1,16 +1,12 @@
-; Coverage for value.cc round_to_commodity_precision for sequence
-; Triggered by rounding a sequence value
+; Coverage for value.cc round_to_commodity_precision for sequence,
+; and SEQUENCE -> STRING conversion introduced for the ==~ operator.
 
 2024/01/15 Test
     Expenses:Food    $50.123
     Assets:Checking
 
-; Test: rounded(to_sequence(amount)) creates sequence, rounds it, then errors on display
-; The rounding of the sequence elements covers
-test reg --format '%(rounded(to_sequence(amount)))\n' Expenses -> 1
-__ERROR__
-While converting ($50.123):
-While handling posting from "$FILE", line 5:
->     Expenses:Food    $50.123
-Error: Cannot convert a sequence to a string
+; Test: rounded(to_sequence(amount)) creates a sequence, rounds each
+; element, then renders the sequence via the SEQUENCE -> STRING cast.
+test reg --format '%(rounded(to_sequence(amount)))\n' Expenses
+($50.123)
 end test

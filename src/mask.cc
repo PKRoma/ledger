@@ -422,4 +422,73 @@ mask_t& mask_t::assign_glob(string_view pat) {
   return *this;
 }
 
+boost::optional<string> mask_t::match_group(string_view text, std::size_t n) const {
+#if HAVE_BOOST_REGEX_UNICODE
+  string match_text = ignore_diacritics ? fold_diacritics(text) : string(text);
+  boost::smatch what;
+  if (boost::u32regex_search(match_text, what, expr) && n < what.size() && what[n].matched) {
+    return what[n].str();
+  }
+  return boost::none;
+#else
+  if (ignore_diacritics) {
+    string match_text = fold_diacritics(text);
+    boost::smatch what;
+    if (boost::regex_search(match_text, what, expr) && n < what.size() && what[n].matched) {
+      return what[n].str();
+    }
+    return boost::none;
+  }
+  string match_text(text);
+  boost::smatch what;
+  if (boost::regex_search(match_text, what, expr) && n < what.size() && what[n].matched) {
+    return what[n].str();
+  }
+  return boost::none;
+#endif
+}
+
+namespace {
+
+/// Collect every matched substring (whole match + all capture groups) from
+/// a `boost::smatch`, representing unmatched optional groups as empty
+/// strings so the resulting vector has the same length as the pattern's
+/// mark count + 1.
+std::vector<string> collect_matches(const boost::smatch& what) {
+  std::vector<string> result;
+  result.reserve(what.size());
+  for (std::size_t i = 0; i < what.size(); ++i) {
+    if (what[i].matched)
+      result.emplace_back(what[i].str());
+    else
+      result.emplace_back();
+  }
+  return result;
+}
+
+} // namespace
+
+boost::optional<std::vector<string>> mask_t::match_groups(string_view text) const {
+#if HAVE_BOOST_REGEX_UNICODE
+  string match_text = ignore_diacritics ? fold_diacritics(text) : string(text);
+  boost::smatch what;
+  if (boost::u32regex_search(match_text, what, expr))
+    return collect_matches(what);
+  return boost::none;
+#else
+  if (ignore_diacritics) {
+    string match_text = fold_diacritics(text);
+    boost::smatch what;
+    if (boost::regex_search(match_text, what, expr))
+      return collect_matches(what);
+    return boost::none;
+  }
+  string match_text(text);
+  boost::smatch what;
+  if (boost::regex_search(match_text, what, expr))
+    return collect_matches(what);
+  return boost::none;
+#endif
+}
+
 } // namespace ledger
