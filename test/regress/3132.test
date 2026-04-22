@@ -1,0 +1,45 @@
+; Regression test for issue #3132: alias expansion must not rewrite
+; fully-qualified account names that happen to contain an alias key as
+; a non-leading component.
+;
+; Previously the change introduced for #836 caused
+; "Expenses:Dining:Coffee" to be expanded to
+; "Expenses:Expenses:Dining:Coffee" because the middle component
+; "Dining" matched the `Dining=Expenses:Dining` alias.  By default the
+; expansion should only apply to the full account name or its first
+; component, preserving the pre-#836 behavior.
+
+alias Coffee=Expenses:Dining:Coffee
+alias Dining=Expenses:Dining
+alias Gas=Expenses:Auto:Gas
+alias Food=Expenses:Groceries:Food
+
+commodity $
+    format  $1,000.00
+    alias   USD
+    default
+
+bucket Liabilities:Credit:Visa
+
+2023/01/31 * Coffee Shop
+    Expenses:Dining:Coffee      $5
+2023/01/31 * Coffee Shop
+    Coffee                      $5
+
+test bal
+              $10.00  Expenses:Dining:Coffee
+             $-10.00  Liabilities:Credit:Visa
+--------------------
+                   0
+end test
+
+; Even with --recursive-aliases, a fully-qualified name that already
+; contains the alias target as a boundary-aligned prefix must not be
+; expanded again.  Both postings should still resolve to
+; Expenses:Dining:Coffee.
+test bal --recursive-aliases
+              $10.00  Expenses:Dining:Coffee
+             $-10.00  Liabilities:Credit:Visa
+--------------------
+                   0
+end test
