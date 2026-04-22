@@ -88,7 +88,12 @@
  *   (*     except: if pattern contains ">["/"<[" or ends with ">","<" *)
  *   (*       followed by "=", it is parsed as a comparison expression.   *)
  *   (*   TOK_META:                                                       *)
- *   (*     pattern [ "=" value_pattern ] → has_tag(/pattern/ [, /value/]) (O_CALL node) *)
+ *   (*     pattern                → has_tag(/pattern/)         (O_CALL node) *)
+ *   (*     pattern TOK_EQ   value → has_tag(/pattern/, /value/) (O_CALL node) *)
+ *   (*     pattern TOK_EQEQ value → tag(/pattern/) == "value"  (O_EQ  node) *)
+ *   (*     A parenthesized pattern (`(pattern)`) desugars to the           *)
+ *   (*     unparenthesized form, so `tag(name) == value` and               *)
+ *   (*     `tag name==value` both produce the same tag()==value tree.      *)
  *   (*   TOK_EXPR:                                                       *)
  *   (*     text → parsed as a raw value expression                       *)
  * @endverbatim
@@ -372,7 +377,13 @@ query_t::lexer_t::next_token(query_t::lexer_t::token_t::kind_t tok_context) {
         return token_t(token_t::TOK_NOTE);
       }
       ++arg_i;
-      consume_next = true;
+      // Peek for a second '=' to produce the TOK_EQEQ token, so `==` is a
+      // single atomic token instead of two TOK_EQs requiring look-ahead hacks
+      // at the parser level.
+      if (arg_i != arg_end && *arg_i == '=') {
+        ++arg_i;
+        return token_t(token_t::TOK_EQEQ);
+      }
       return token_t(token_t::TOK_EQ);
 
     case '\\':
@@ -398,34 +409,78 @@ void query_t::lexer_t::token_t::expected(char wanted) {
 /*--- Parser: Recursive-Descent Expression Construction ---*/
 
 /**
- * Build a metadata matching node: has_tag(pattern), or has_tag(pattern, value)
- * if followed by `= value_pattern`.
+ * Build an O_EQ node that compares tag(mask) with a string value.
+ *
+ * Used for the `%name==value` and `%tag(name)==value` forms, which both
+ * desugar into: tag(/name/) == "value".
+ *
+ * @param mask_arg A VALUE node holding the tag-name mask; reused as the
+ *                 single argument to the freshly-constructed tag() call.
+ * @param val_str  The right-hand side string literal.
+ */
+expr_t::ptr_op_t query_t::parser_t::make_meta_eq_node(const expr_t::ptr_op_t& mask_arg,
+                                                      const string& val_str) {
+  expr_t::ptr_op_t tag_ident = new expr_t::op_t(expr_t::op_t::IDENT);
+  tag_ident->set_ident("tag");
+
+  expr_t::ptr_op_t tag_call = new expr_t::op_t(expr_t::op_t::O_CALL);
+  tag_call->set_left(tag_ident);
+  tag_call->set_right(mask_arg);
+
+  expr_t::ptr_op_t value_node = new expr_t::op_t(expr_t::op_t::VALUE);
+  value_node->set_value(string_value(val_str));
+
+  expr_t::ptr_op_t eq_node = new expr_t::op_t(expr_t::op_t::O_EQ);
+  eq_node->set_left(tag_call);
+  eq_node->set_right(value_node);
+  return eq_node;
+}
+
+/**
+ * Build a metadata matching node.
+ *
+ * - No operator:  has_tag(pattern)           -- existence check
+ * - TOK_EQ  `=`:  has_tag(pattern, value)    -- regex value match
+ * - TOK_EQEQ `==`: tag(pattern) == "value"   -- exact string comparison
  */
 expr_t::ptr_op_t query_t::parser_t::make_meta_node(const string& tag_pattern,
                                                    query_t::lexer_t::token_t::kind_t tok_context) {
-  expr_t::ptr_op_t node = new expr_t::op_t(expr_t::op_t::O_CALL);
+  expr_t::ptr_op_t mask_arg = new expr_t::op_t(expr_t::op_t::VALUE);
+  mask_arg->set_value(mask_t(tag_pattern));
+
+  lexer_t::token_t tok = lexer.peek_token(tok_context);
+
+  if (tok.kind == lexer_t::token_t::TOK_EQEQ) {
+    // `%name==value` -- exact string equality against tag value.
+    lexer.next_token(tok_context); // consume '=='
+    lexer_t::token_t val_tok = lexer.next_token(tok_context);
+    if (val_tok.kind != lexer_t::token_t::TERM)
+      throw_(parse_error, _("Metadata equality operator not followed by term"));
+    assert(val_tok.value);
+    return make_meta_eq_node(mask_arg, *val_tok.value);
+  }
 
   expr_t::ptr_op_t ident = new expr_t::op_t(expr_t::op_t::IDENT);
   ident->set_ident("has_tag");
+
+  expr_t::ptr_op_t node = new expr_t::op_t(expr_t::op_t::O_CALL);
   node->set_left(ident);
 
-  expr_t::ptr_op_t arg1 = new expr_t::op_t(expr_t::op_t::VALUE);
-  arg1->set_value(mask_t(tag_pattern));
-
-  lexer_t::token_t tok = lexer.peek_token(tok_context);
   if (tok.kind == lexer_t::token_t::TOK_EQ) {
-    tok = lexer.next_token(tok_context);
-    tok = lexer.next_token(tok_context);
-    if (tok.kind != lexer_t::token_t::TERM)
+    // `%name=value` -- regex value match via has_tag(name_mask, value_mask).
+    lexer.next_token(tok_context); // consume '='
+    lexer_t::token_t val_tok = lexer.next_token(tok_context);
+    if (val_tok.kind != lexer_t::token_t::TERM)
       throw_(parse_error, _("Metadata equality operator not followed by term"));
+    assert(val_tok.value);
 
-    expr_t::ptr_op_t arg2 = new expr_t::op_t(expr_t::op_t::VALUE);
-    assert(tok.value);
-    arg2->set_value(mask_t(*tok.value));
+    expr_t::ptr_op_t value_mask = new expr_t::op_t(expr_t::op_t::VALUE);
+    value_mask->set_value(mask_t(*val_tok.value));
 
-    node->set_right(expr_t::op_t::new_node(expr_t::op_t::O_CONS, arg1, arg2));
+    node->set_right(expr_t::op_t::new_node(expr_t::op_t::O_CONS, mask_arg, value_mask));
   } else {
-    node->set_right(arg1);
+    // `%name` -- existence check.
+    node->set_right(mask_arg);
   }
   return node;
 }
@@ -517,7 +572,9 @@ expr_t::ptr_op_t query_t::parser_t::make_match_node(query_t::lexer_t::token_t::k
  *   - An O_CALL to `has_tag()` for metadata, optionally with a value match.
  *   - A raw expression parse for `expr` context.
  *   - A comparison expression for terms containing `>[` or `<[` syntax.
- * - **Parenthesized sub-expressions**: Recurse into parse_query_expr.
+ * - **Parenthesized sub-expressions**: Recurse into parse_query_expr, or in
+ *   TOK_META context, consume a single pattern so `tag(name) == value`
+ *   flows through make_meta_node like the unparenthesized form.
  */
 expr_t::ptr_op_t
 query_t::parser_t::parse_query_term(query_t::lexer_t::token_t::kind_t tok_context) {
@@ -571,11 +628,26 @@ query_t::parser_t::parse_query_term(query_t::lexer_t::token_t::kind_t tok_contex
   case lexer_t::token_t::LPAREN:
     if (++parse_depth > MAX_PARSE_DEPTH)
       throw_(parse_error, _("Query expression nested too deeply"));
-    node = parse_query_expr(tok_context, true);
+    if (tok_context == lexer_t::token_t::TOK_META) {
+      // In TOK_META context, `(pattern)` is a parenthesized tag-name mask,
+      // not a boolean subexpression.  Forward the pattern to make_meta_node
+      // so any trailing `=` / `==` operator is handled uniformly with the
+      // unparenthesized form (`tag name` vs `tag(name)`).
+      lexer_t::token_t name_tok = lexer.next_token(tok_context);
+      if (name_tok.kind != lexer_t::token_t::TERM)
+        throw_(parse_error, _("Expected metadata tag name inside parentheses"));
+      tok = lexer.next_token(tok_context);
+      if (tok.kind != lexer_t::token_t::RPAREN)
+        tok.expected(')');
+      assert(name_tok.value);
+      node = make_meta_node(*name_tok.value, tok_context);
+    } else {
+      node = parse_query_expr(tok_context, true);
+      tok = lexer.next_token(tok_context);
+      if (tok.kind != lexer_t::token_t::RPAREN)
+        tok.expected(')');
+    }
     --parse_depth;
-    tok = lexer.next_token(tok_context);
-    if (tok.kind != lexer_t::token_t::RPAREN)
-      tok.expected(')');
     break;
 
   default:

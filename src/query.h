@@ -145,10 +145,11 @@ public:
         LPAREN, ///< `(` -- opens a grouped sub-expression.
         RPAREN, ///< `)` -- closes a grouped sub-expression.
 
-        TOK_NOT, ///< `not` or `!` -- logical negation.
-        TOK_AND, ///< `and` or `&` -- logical conjunction.
-        TOK_OR,  ///< `or` or `|` -- logical disjunction.
-        TOK_EQ,  ///< `=` when used as a metadata value comparator (e.g., `%tag=value`).
+        TOK_NOT,  ///< `not` or `!` -- logical negation.
+        TOK_AND,  ///< `and` or `&` -- logical conjunction.
+        TOK_OR,   ///< `or` or `|` -- logical disjunction.
+        TOK_EQ,   ///< `=` when used as a metadata value comparator (e.g., `%tag=value`).
+        TOK_EQEQ, ///< `==` for exact metadata value equality (e.g., `%tag==value`).
 
         TOK_CODE,    ///< `code` or `#` -- match transaction code field.
         TOK_PAYEE,   ///< `payee`, `desc`, or `@` -- match payee/description field.
@@ -208,6 +209,8 @@ public:
           return "TOK_OR";
         case TOK_EQ:
           return "TOK_EQ";
+        case TOK_EQEQ:
+          return "TOK_EQEQ";
         case TOK_CODE:
           return "TOK_CODE";
         case TOK_PAYEE:
@@ -257,6 +260,8 @@ public:
           return "or";
         case TOK_EQ:
           return "=";
+        case TOK_EQEQ:
+          return "==";
         case TOK_CODE:
           return "code";
         case TOK_PAYEE:
@@ -436,6 +441,11 @@ protected:
     /// @brief Build a metadata matching node: has_tag(pattern) or has_tag(pattern, value).
     expr_t::ptr_op_t make_meta_node(const string& tag_pattern,
                                     lexer_t::token_t::kind_t tok_context);
+    /// @brief Build an equality comparison node: tag(mask) == "value".
+    /// @param mask_arg The VALUE node carrying the tag-name mask (reused as the argument to tag()).
+    /// @param val_str The string on the right-hand side of the `==`.
+    static expr_t::ptr_op_t make_meta_eq_node(const expr_t::ptr_op_t& mask_arg,
+                                              const string& val_str);
     /// @brief Try to parse a term as a comparison expression (e.g., "d>=[date]").
     /// @return The expression node if the term is a comparison, nullptr otherwise.
     expr_t::ptr_op_t try_parse_comparison(const string& term, lexer_t::token_t::kind_t tok_context);
