@@ -88,8 +88,12 @@
  *   (*     except: if pattern contains ">["/"<[" or ends with ">","<" *)
  *   (*       followed by "=", it is parsed as a comparison expression.   *)
  *   (*   TOK_META:                                                       *)
- *   (*     pattern [ "=" value_pattern ] → has_tag(/pattern/ [, /value/]) (O_CALL node) *)
- *   (*     pattern "==" value → tag(/pattern/) == "value"  (O_EQ node)  *)
+ *   (*     pattern                → has_tag(/pattern/)         (O_CALL node) *)
+ *   (*     pattern TOK_EQ   value → has_tag(/pattern/, /value/) (O_CALL node) *)
+ *   (*     pattern TOK_EQEQ value → tag(/pattern/) == "value"  (O_EQ  node) *)
+ *   (*     The TOK_EQEQ form is also recognized after a parenthesized     *)
+ *   (*     subquery, e.g. %tag(pattern) == value, in which case the       *)
+ *   (*     has_tag(mask) built inside the parens is re-used as tag(mask). *)
  *   (*   TOK_EXPR:                                                       *)
  *   (*     text → parsed as a raw value expression                       *)
  * @endverbatim
@@ -373,7 +377,13 @@ query_t::lexer_t::next_token(query_t::lexer_t::token_t::kind_t tok_context) {
         return token_t(token_t::TOK_NOTE);
       }
       ++arg_i;
-      consume_next = true;
+      // Peek for a second '=' to produce the TOK_EQEQ token, so `==` is a
+      // single atomic token instead of two TOK_EQs requiring look-ahead hacks
+      // at the parser level.
+      if (arg_i != arg_end && *arg_i == '=') {
+        ++arg_i;
+        return token_t(token_t::TOK_EQEQ);
+      }
       return token_t(token_t::TOK_EQ);
 
     case '\\':
@@ -399,63 +409,78 @@ void query_t::lexer_t::token_t::expected(char wanted) {
 /*--- Parser: Recursive-Descent Expression Construction ---*/
 
 /**
+ * Build an O_EQ node that compares tag(mask) with a string value.
+ *
+ * Used for the `%name==value` and `%tag(name)==value` forms, which both
+ * desugar into: tag(/name/) == "value".
+ *
+ * @param mask_arg A VALUE node holding the tag-name mask; reused as the
+ *                 single argument to the freshly-constructed tag() call.
+ * @param val_str  The right-hand side string literal.
+ */
+expr_t::ptr_op_t query_t::parser_t::make_meta_eq_node(const expr_t::ptr_op_t& mask_arg,
+                                                      const string& val_str) {
+  expr_t::ptr_op_t tag_ident = new expr_t::op_t(expr_t::op_t::IDENT);
+  tag_ident->set_ident("tag");
+
+  expr_t::ptr_op_t tag_call = new expr_t::op_t(expr_t::op_t::O_CALL);
+  tag_call->set_left(tag_ident);
+  tag_call->set_right(mask_arg);
+
+  expr_t::ptr_op_t value_node = new expr_t::op_t(expr_t::op_t::VALUE);
+  value_node->set_value(string_value(val_str));
+
+  expr_t::ptr_op_t eq_node = new expr_t::op_t(expr_t::op_t::O_EQ);
+  eq_node->set_left(tag_call);
+  eq_node->set_right(value_node);
+  return eq_node;
+}
+
+/**
  * Build a metadata matching node.
  *
  * - No operator:  has_tag(pattern)           -- existence check
- * - Single `=`:   has_tag(pattern, value)    -- regex value match
- * - Double `==`:  tag(pattern) == "value"    -- exact string comparison
+ * - TOK_EQ  `=`:  has_tag(pattern, value)    -- regex value match
+ * - TOK_EQEQ `==`: tag(pattern) == "value"   -- exact string comparison
  */
 expr_t::ptr_op_t query_t::parser_t::make_meta_node(const string& tag_pattern,
                                                    query_t::lexer_t::token_t::kind_t tok_context) {
-  expr_t::ptr_op_t node = new expr_t::op_t(expr_t::op_t::O_CALL);
+  expr_t::ptr_op_t mask_arg = new expr_t::op_t(expr_t::op_t::VALUE);
+  mask_arg->set_value(mask_t(tag_pattern));
+
+  lexer_t::token_t tok = lexer.peek_token(tok_context);
+
+  if (tok.kind == lexer_t::token_t::TOK_EQEQ) {
+    // `%name==value` -- exact string equality against tag value.
+    lexer.next_token(tok_context); // consume '=='
+    lexer_t::token_t val_tok = lexer.next_token(tok_context);
+    if (val_tok.kind != lexer_t::token_t::TERM)
+      throw_(parse_error, _("Metadata equality operator not followed by term"));
+    assert(val_tok.value);
+    return make_meta_eq_node(mask_arg, *val_tok.value);
+  }
 
   expr_t::ptr_op_t ident = new expr_t::op_t(expr_t::op_t::IDENT);
   ident->set_ident("has_tag");
+
+  expr_t::ptr_op_t node = new expr_t::op_t(expr_t::op_t::O_CALL);
   node->set_left(ident);
 
-  expr_t::ptr_op_t arg1 = new expr_t::op_t(expr_t::op_t::VALUE);
-  arg1->set_value(mask_t(tag_pattern));
-
-  lexer_t::token_t tok = lexer.peek_token(tok_context);
   if (tok.kind == lexer_t::token_t::TOK_EQ) {
-    tok = lexer.next_token(tok_context); // consume first '='
-
-    // Check for '==' (exact string equality) vs '=' (regex value match).
-    lexer_t::token_t tok2 = lexer.peek_token(tok_context);
-    if (tok2.kind == lexer_t::token_t::TOK_EQ) {
-      // Double '==' : build get_tag(mask) == string_value
-      lexer.next_token(tok_context); // consume second '='
-      tok = lexer.next_token(tok_context);
-      if (tok.kind != lexer_t::token_t::TERM)
-        throw_(parse_error, _("Metadata equality operator not followed by term"));
-
-      // Switch from has_tag (existence check) to tag (value retrieval)
-      ident->set_ident("tag");
-      node->set_right(arg1);
-
-      // Wrap in an O_EQ comparison: tag(tag_mask) == "value"
-      expr_t::ptr_op_t value_node = new expr_t::op_t(expr_t::op_t::VALUE);
-      assert(tok.value);
-      value_node->set_value(string_value(*tok.value));
-
-      expr_t::ptr_op_t eq_node = new expr_t::op_t(expr_t::op_t::O_EQ);
-      eq_node->set_left(node);
-      eq_node->set_right(value_node);
-      return eq_node;
-    }
-
-    // Single '=' : regex value match via has_tag(name_mask, value_mask)
-    tok = lexer.next_token(tok_context);
-    if (tok.kind != lexer_t::token_t::TERM)
+    // `%name=value` -- regex value match via has_tag(name_mask, value_mask).
+    lexer.next_token(tok_context); // consume '='
+    lexer_t::token_t val_tok = lexer.next_token(tok_context);
+    if (val_tok.kind != lexer_t::token_t::TERM)
       throw_(parse_error, _("Metadata equality operator not followed by term"));
+    assert(val_tok.value);
 
-    expr_t::ptr_op_t arg2 = new expr_t::op_t(expr_t::op_t::VALUE);
-    assert(tok.value);
-    arg2->set_value(mask_t(*tok.value));
+    expr_t::ptr_op_t value_mask = new expr_t::op_t(expr_t::op_t::VALUE);
+    value_mask->set_value(mask_t(*val_tok.value));
 
-    node->set_right(expr_t::op_t::new_node(expr_t::op_t::O_CONS, arg1, arg2));
+    node->set_right(expr_t::op_t::new_node(expr_t::op_t::O_CONS, mask_arg, value_mask));
   } else {
-    node->set_right(arg1);
+    // `%name` -- existence check.
+    node->set_right(mask_arg);
   }
   return node;
 }
@@ -578,39 +603,22 @@ query_t::parser_t::parse_query_term(query_t::lexer_t::token_t::kind_t tok_contex
     if (!node)
       throw_(parse_error, _f("%1% operator not followed by argument") % tok.symbol());
 
-    // Handle tag("Category") == "food" : the '==' appears after the closing
-    // ')' of the parenthesized subexpression, so make_meta_node never saw it.
-    // Detect single-arg has_tag followed by '==' and convert to
-    // tag(mask) == string for exact value comparison.
+    // A trailing `==` after a parenthesized metadata subquery (e.g.,
+    // `tag("Category") == "food"`) is recognized here because make_meta_node
+    // is called inside the parens and therefore returns before seeing the
+    // operator.  The recursive call has already produced a has_tag(mask)
+    // O_CALL; if a TOK_EQEQ follows, rebuild it as `tag(mask) == "value"`
+    // using fresh nodes (the inner mask is reused as the tag() argument).
     if (tok.kind == lexer_t::token_t::TOK_META && node->kind == expr_t::op_t::O_CALL &&
         node->left() && node->left()->is_ident() && node->left()->as_ident() == "has_tag" &&
-        node->right() && node->right()->kind == expr_t::op_t::VALUE) {
-      lexer_t::token_t eq1 = lexer.peek_token(tok_context);
-      if (eq1.kind == lexer_t::token_t::TOK_EQ) {
-        lexer.next_token(tok_context); // consume first '='
-        lexer_t::token_t eq2 = lexer.peek_token(tok_context);
-        if (eq2.kind == lexer_t::token_t::TOK_EQ) {
-          lexer.next_token(tok_context); // consume second '='
-          lexer_t::token_t val_tok = lexer.next_token(tok_context);
-          if (val_tok.kind != lexer_t::token_t::TERM)
-            throw_(parse_error, _("Metadata equality operator not followed by term"));
-
-          // Convert has_tag -> tag for value retrieval
-          node->left()->set_ident("tag");
-
-          // Build equality comparison node
-          expr_t::ptr_op_t value_node = new expr_t::op_t(expr_t::op_t::VALUE);
-          assert(val_tok.value);
-          value_node->set_value(string_value(*val_tok.value));
-
-          expr_t::ptr_op_t eq_node = new expr_t::op_t(expr_t::op_t::O_EQ);
-          eq_node->set_left(node);
-          eq_node->set_right(value_node);
-          node = eq_node;
-        }
-        // Single '=' after parenthesized tag: no action (the consumed '='
-        // was already meaningless in this position before this fix).
-      }
+        node->right() && node->right()->kind == expr_t::op_t::VALUE &&
+        lexer.peek_token(tok_context).kind == lexer_t::token_t::TOK_EQEQ) {
+      lexer.next_token(tok_context); // consume '=='
+      lexer_t::token_t val_tok = lexer.next_token(tok_context);
+      if (val_tok.kind != lexer_t::token_t::TERM)
+        throw_(parse_error, _("Metadata equality operator not followed by term"));
+      assert(val_tok.value);
+      node = make_meta_eq_node(node->right(), *val_tok.value);
     }
     break;
 
