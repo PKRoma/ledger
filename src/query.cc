@@ -91,9 +91,9 @@
  *   (*     pattern                → has_tag(/pattern/)         (O_CALL node) *)
  *   (*     pattern TOK_EQ   value → has_tag(/pattern/, /value/) (O_CALL node) *)
  *   (*     pattern TOK_EQEQ value → tag(/pattern/) == "value"  (O_EQ  node) *)
- *   (*     The TOK_EQEQ form is also recognized after a parenthesized     *)
- *   (*     subquery, e.g. %tag(pattern) == value, in which case the       *)
- *   (*     has_tag(mask) built inside the parens is re-used as tag(mask). *)
+ *   (*     A parenthesized pattern (`(pattern)`) desugars to the           *)
+ *   (*     unparenthesized form, so `tag(name) == value` and               *)
+ *   (*     `tag name==value` both produce the same tag()==value tree.      *)
  *   (*   TOK_EXPR:                                                       *)
  *   (*     text → parsed as a raw value expression                       *)
  * @endverbatim
@@ -572,7 +572,9 @@ expr_t::ptr_op_t query_t::parser_t::make_match_node(query_t::lexer_t::token_t::k
  *   - An O_CALL to `has_tag()` for metadata, optionally with a value match.
  *   - A raw expression parse for `expr` context.
  *   - A comparison expression for terms containing `>[` or `<[` syntax.
- * - **Parenthesized sub-expressions**: Recurse into parse_query_expr.
+ * - **Parenthesized sub-expressions**: Recurse into parse_query_expr, or in
+ *   TOK_META context, consume a single pattern so `tag(name) == value`
+ *   flows through make_meta_node like the unparenthesized form.
  */
 expr_t::ptr_op_t
 query_t::parser_t::parse_query_term(query_t::lexer_t::token_t::kind_t tok_context) {
@@ -602,24 +604,6 @@ query_t::parser_t::parse_query_term(query_t::lexer_t::token_t::kind_t tok_contex
     node = parse_query_term(tok.kind);
     if (!node)
       throw_(parse_error, _f("%1% operator not followed by argument") % tok.symbol());
-
-    // A trailing `==` after a parenthesized metadata subquery (e.g.,
-    // `tag("Category") == "food"`) is recognized here because make_meta_node
-    // is called inside the parens and therefore returns before seeing the
-    // operator.  The recursive call has already produced a has_tag(mask)
-    // O_CALL; if a TOK_EQEQ follows, rebuild it as `tag(mask) == "value"`
-    // using fresh nodes (the inner mask is reused as the tag() argument).
-    if (tok.kind == lexer_t::token_t::TOK_META && node->kind == expr_t::op_t::O_CALL &&
-        node->left() && node->left()->is_ident() && node->left()->as_ident() == "has_tag" &&
-        node->right() && node->right()->kind == expr_t::op_t::VALUE &&
-        lexer.peek_token(tok_context).kind == lexer_t::token_t::TOK_EQEQ) {
-      lexer.next_token(tok_context); // consume '=='
-      lexer_t::token_t val_tok = lexer.next_token(tok_context);
-      if (val_tok.kind != lexer_t::token_t::TERM)
-        throw_(parse_error, _("Metadata equality operator not followed by term"));
-      assert(val_tok.value);
-      node = make_meta_eq_node(node->right(), *val_tok.value);
-    }
     break;
 
   case lexer_t::token_t::TERM:
@@ -644,11 +628,26 @@ query_t::parser_t::parse_query_term(query_t::lexer_t::token_t::kind_t tok_contex
   case lexer_t::token_t::LPAREN:
     if (++parse_depth > MAX_PARSE_DEPTH)
       throw_(parse_error, _("Query expression nested too deeply"));
-    node = parse_query_expr(tok_context, true);
+    if (tok_context == lexer_t::token_t::TOK_META) {
+      // In TOK_META context, `(pattern)` is a parenthesized tag-name mask,
+      // not a boolean subexpression.  Forward the pattern to make_meta_node
+      // so any trailing `=` / `==` operator is handled uniformly with the
+      // unparenthesized form (`tag name` vs `tag(name)`).
+      lexer_t::token_t name_tok = lexer.next_token(tok_context);
+      if (name_tok.kind != lexer_t::token_t::TERM)
+        throw_(parse_error, _("Expected metadata tag name inside parentheses"));
+      tok = lexer.next_token(tok_context);
+      if (tok.kind != lexer_t::token_t::RPAREN)
+        tok.expected(')');
+      assert(name_tok.value);
+      node = make_meta_node(*name_tok.value, tok_context);
+    } else {
+      node = parse_query_expr(tok_context, true);
+      tok = lexer.next_token(tok_context);
+      if (tok.kind != lexer_t::token_t::RPAREN)
+        tok.expected(')');
+    }
     --parse_depth;
-    tok = lexer.next_token(tok_context);
-    if (tok.kind != lexer_t::token_t::RPAREN)
-      tok.expected(')');
     break;
 
   default:
