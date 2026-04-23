@@ -279,6 +279,34 @@ public:
   }
 };
 
+/*--- Vertex filter for visualization ---*/
+
+/**
+ * @brief Vertex predicate for Boost.Graph `filtered_graph` that excludes
+ *        built-in commodities from visualizations.
+ *
+ * Built-in commodities (the null commodity "" plus "s", "%", "m", and
+ * "h" used for time-log parsing and percentage arithmetic) are created
+ * unconditionally at session startup and carry the COMMODITY_BUILTIN
+ * flag.  They have no meaning to users inspecting the price graph, so
+ * the `pricemap` command filters them out to avoid confusing output
+ * (issue #738).
+ */
+template <typename NameMap>
+class non_builtin_vertex_predicate {
+public:
+  NameMap name;
+
+  non_builtin_vertex_predicate() {}
+  explicit non_builtin_vertex_predicate(NameMap _name) : name(_name) {}
+
+  template <typename Vertex>
+  bool operator()(const Vertex& v) const {
+    const commodity_t* comm = name[v];
+    return comm && !comm->has_flags(COMMODITY_BUILTIN);
+  }
+};
+
 /*--- Filtered graph type aliases ---*/
 
 /// The filtered graph type: the full price graph with edges restricted
@@ -610,12 +638,19 @@ private:
 };
 
 void commodity_history_impl_t::print_map(std::ostream& out, const datetime_t& moment) {
+  NameMap namemap = get(vertex_name, price_graph);
+  non_builtin_vertex_predicate<NameMap> vpred(namemap);
+
   if (moment.is_not_a_date_time()) {
-    write_graphviz(out, price_graph, label_writer<NameMap>(get(vertex_name, price_graph)));
+    using VGraph = filtered_graph<Graph, keep_all, non_builtin_vertex_predicate<NameMap>>;
+    VGraph vg(price_graph, keep_all(), vpred);
+    write_graphviz(out, vg, label_writer<NameMap>(namemap));
   } else {
-    FGraph fg(price_graph, recent_edge_weight<EdgeWeightMap, PricePointMap, PriceRatioMap>(
-                               get(edge_weight, price_graph), pricemap, ratiomap, moment));
-    write_graphviz(out, fg, label_writer<FNameMap>(get(vertex_name, fg)));
+    using EdgeFilter = recent_edge_weight<EdgeWeightMap, PricePointMap, PriceRatioMap>;
+    using VFGraph = filtered_graph<Graph, EdgeFilter, non_builtin_vertex_predicate<NameMap>>;
+    VFGraph vfg(price_graph, EdgeFilter(get(edge_weight, price_graph), pricemap, ratiomap, moment),
+                vpred);
+    write_graphviz(out, vfg, label_writer<NameMap>(namemap));
   }
 }
 

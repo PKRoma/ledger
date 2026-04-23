@@ -36,11 +36,6 @@ end test
 
 test pricemap
 graph G {
-0[label=""];
-1[label="s"];
-2[label="%"];
-3[label="m"];
-4[label="h"];
 5[label="$"];
 6[label="EUR"];
 7[label="GBP"];
