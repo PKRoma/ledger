@@ -1126,7 +1126,15 @@ public:
 
   OPTION_CTOR(
       report_t, prices_format_, CTOR(report_t, prices_format_) {
-        on(none, "%(date) %-8(display_account) %(justify(scrub(display_amount), 12, "
+        // --average (-A) rewrites display_total into the running average of
+        // the posted amount, and --deviation further transforms it into
+        // "display_amount - display_total" (the deviation from that average).
+        // Neither option touches display_amount, so the format must pick
+        // display_total whenever one of them is active (otherwise the report
+        // reflects raw prices and the options appear to have no effect,
+        // issue #753).
+        on(none, "%(date) %-8(display_account) %(justify(scrub("
+                 "options.average or options.deviation ? display_total : display_amount), 12, "
                  "    2 + 9 + 8 + 12, true, color))\n");
       });
 

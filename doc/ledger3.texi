@@ -6085,12 +6085,14 @@ the same data.
 @findex pricedb
 @findex --average
 @findex --both-directions
+@findex --deviation
 @findex --latest
 
 The @command{prices} command displays the price history for matching
 commodities.  The @option{--average (-A)} option is useful with this
-report, to display the running average price, or @option{--deviation
-(-D)} to show each price's deviation from that average.
+report, to display the running average price.  Combine it with
+@option{--deviation} to show each price's deviation from that
+running average.
 
 Use @option{--latest} to display only the most recently-dated price
 for each commodity, rather than the full price history.  This is
@@ -8508,9 +8510,15 @@ Set the format expected for the historical price file.  The default is:
 Set the format for the @command{prices} report.  The default is:
 
 @smallexample
-"%(date) %-8(display_account) %(justify(scrub(display_amount), 12,
+"%(date) %-8(display_account) %(justify(scrub(
+           options.average or options.deviation
+             ? display_total : display_amount), 12,
            2 + 9 + 8 + 12, true, color))\n"
 @end smallexample
+
+The conditional in the default format selects @code{display_total} when
+@option{--average} or @option{--deviation} is active, so those options
+transform the reported price column rather than being silently ignored.
 
 @end ftable
 
