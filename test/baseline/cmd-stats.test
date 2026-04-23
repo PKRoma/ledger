@@ -12,7 +12,7 @@
     B
 
 test stats --now "2012-03-31"
-Time period: 12-Feb-28 to 12-Mar-24 (25 days)
+Time period: 12-Feb-28 to 12-Mar-24 (26 days)
 
   Files these postings came from:
     $sourcepath/test/baseline/cmd-stats.test
@@ -20,7 +20,7 @@ Time period: 12-Feb-28 to 12-Mar-24 (25 days)
   Unique payees:               1
   Unique accounts:             4
 
-  Number of postings:          6 (0.24 per day)
+  Number of postings:          6 (0.23 per day)
   Uncleared postings:          2
 
   Days since last post:        7
