@@ -1,0 +1,42 @@
+; Regression test for issue #763: Error: Cannot convert a balance with
+; multiple commodities to an amount (BZ#763)
+;
+; When a register report uses -H together with a display filter that
+; references `commodity` (e.g., -d "commodity == 'EUR'") on a journal
+; containing multiple commodities, get_commodity() was called for a
+; posting whose compound value was a multi-commodity balance and tried
+; to convert that balance to an amount, throwing "Cannot convert a
+; balance with multiple commodities to an amount".
+;
+; The fix extends the sequence guard in get_commodity() (and the parallel
+; get_commodity_is_primary()) to also handle multi-commodity balances:
+; when the compound value is a balance holding more than one commodity,
+; fall back to post.amount's commodity, which matches what a -l filter
+; already sees.
+
+2011-01-01 * Opening balance
+    Assets:Investments           1 "BBB" @  2.653329339867 GBP
+    Equity:Opening balance
+
+2011-01-10 * Fee
+    Liabilities:Credit Card                         -2.83 EUR
+    Expenses:Fees                                 (2.83/2 EUR)
+    Assets:Receivable
+
+test reg -X EUR -H -l "commodity == 'EUR'"
+11-Jan-10 Fee                   Liabilitie:Credit Card    -2.83 EUR    -2.83 EUR
+                                <Adjustment>              -0.01 EUR    -2.84 EUR
+                                Expenses:Fees              1.42 EUR    -1.42 EUR
+                                Assets:Receivable          1.42 EUR            0
+end test
+
+test reg -X EUR -H -d "commodity == 'EUR'"
+11-Jan-10 Fee                   Liabilitie:Credit Card    -2.83 EUR        1 BBB
+                                                                       -2.83 EUR
+                                GBP-2.653329339867000000000000000000000000000000
+                                Expenses:Fees              1.42 EUR        1 BBB
+                                                                       -1.42 EUR
+                                GBP-2.653329339867000000000000000000000000000000
+                                Assets:Receivable          1.42 EUR        1 BBB
+                                GBP-2.653329339867000000000000000000000000000000
+end test
