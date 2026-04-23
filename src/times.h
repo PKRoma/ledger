@@ -157,6 +157,15 @@ optional<date_time::weekdays> string_to_day_of_week(const std::string& str);
 /// @return The month, or none if the string is not recognized.
 optional<date_time::months_of_year> string_to_month_of_year(const std::string& str);
 
+/// @brief Resolve a single-word relative-date keyword ("today", "yesterday", "tomorrow",
+/// or the short forms "tday", "yday", "tmrw") to a concrete date.
+///
+/// The anchor is `epoch->date()` if --now was used, otherwise CURRENT_DATE().
+/// Intended for command-line contexts (like the xact command) that accept a
+/// relative date as a positional argument.
+/// @return The resolved date, or none if the string is not a recognized keyword.
+optional<date_t> string_to_relative_date(const std::string& str);
+
 /**
  * @brief Parse a datetime string in "YYYY/MM/DD HH:MM:SS" or "MM/DD/YYYY HH:MM:SS" format.
  *
@@ -195,6 +204,21 @@ date_t parse_date(const char* str);
 inline date_t parse_date(const std::string& str) {
   return parse_date(str.c_str());
 }
+
+/**
+ * @brief Parse a date string that may be either a standard date format or a
+ *        relative date expression (e.g. "yesterday", "last month", "3 days ago").
+ *
+ * First attempts `parse_date()` using the registered format readers.  If that
+ * fails, the string is handed to the `date_interval_t` parser, which recognizes
+ * the full period-expression grammar (today/yesterday/tomorrow, this/next/last
+ * <unit>, <N> <unit> ago/hence, and explicit dates).
+ *
+ * @param str  The date expression.
+ * @return     The resolved date.
+ * @throws date_error if neither parser accepts the string.
+ */
+date_t parse_date_expr(const std::string& str);
 
 /**
  * @brief Selects which format to use when rendering dates or datetimes.

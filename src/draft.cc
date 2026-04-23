@@ -139,6 +139,7 @@ void draft_t::parse_args(const value_t& args) {
   tmpl = xact_template_t();
 
   optional<date_time::weekdays> weekday;
+  optional<date_t> rel_date;
   xact_template_t::post_template_t* post = nullptr;
   value_t::sequence_t::const_iterator begin = args.begin();
   value_t::sequence_t::const_iterator end = args.end();
@@ -148,6 +149,13 @@ void draft_t::parse_args(const value_t& args) {
 
     if (check_for_date && regex_match(arg, what, date_mask)) {
       tmpl->date_string = what[0];
+      check_for_date = false;
+    } else if (check_for_date && (rel_date = string_to_relative_date(arg))) {
+      // "today", "yesterday", "tomorrow" (and the short forms "tday",
+      // "yday", "tmrw") as a positional first argument.  Multi-word
+      // expressions such as "last month" must be passed with the `on`
+      // preposition so they can be supplied as a single argument.
+      tmpl->date = *rel_date;
       check_for_date = false;
     } else {
       weekday = string_to_day_of_week(arg);
@@ -360,14 +368,17 @@ xact_t* draft_t::insert(journal_t& journal) {
     added->_date = tmpl->date;
     DEBUG("draft.xact", "Setting date to template date: " << *tmpl->date);
   } else if (tmpl->date_string) {
-    // Convert separators to slashes for consistent parsing
+    // Convert separators to slashes for consistent parsing.  parse_date_expr
+    // first tries the registered date formats and falls back to the full
+    // period-expression grammar (yesterday, last month, 3 days ago, etc.)
+    // so the `on` preposition accepts the same date vocabulary as --period.
     string date_str = *tmpl->date_string;
     for (char& c : date_str) {
       if (c == '-' || c == '.')
         c = '/';
     }
 
-    added->_date = parse_date(date_str);
+    added->_date = parse_date_expr(date_str);
     DEBUG("draft.xact",
           "Setting date to parsed date string: " << *tmpl->date_string << " -> " << added->_date);
   }
