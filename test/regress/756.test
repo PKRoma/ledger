@@ -1,0 +1,39 @@
+; Regression test for issue #756: --anon must give the same anonymized
+; label to a commodity regardless of which price/lot annotation is attached
+; to it.  Previously, AAA appeared as different labels (A, C, ...) across
+; transactions because annotated commodities have distinct pointers from
+; their base, and anonymize_posts indexed commodities by pointer instead
+; of by referent.  After the fix, the base commodity (AAA) maps to a
+; single label and the annotated forms inherit it.
+
+2012-01-01 * Buy AAA
+    A         1 AAA @ 1.00 EUR
+    B                -1.00 EUR
+
+2012-02-01 * Buy AAA
+    A         1 AAA @ 2.00 EUR
+    B                -2.00 EUR
+
+2012-03-01 * Buy AAA
+    A         1 AAA @ 3.00 EUR
+    B                -3.00 EUR
+
+; All AAA postings use the same anonymized commodity ("A"), regardless
+; of the differing price annotations.  All EUR postings use a single
+; commodity ("B") as well.
+test --anon reg --format "%(date) %(commodity)\n"
+2012/01/01 A
+2012/01/01 B
+2012/02/01 A
+2012/02/01 B
+2012/03/01 A
+2012/03/01 B
+end test
+
+; The pricedb output must use a single label for the priced currency
+; across all price entries.
+test --anon pricedb --format "%(date) %(amount)\n"
+2012/01/01 1.00 A
+2012/02/01 2.00 A
+2012/03/01 3.00 A
+end test
