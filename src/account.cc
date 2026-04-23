@@ -688,9 +688,16 @@ account_t::xdata_t::details_t& account_t::xdata_t::details_t::operator+=(const d
 void account_t::clear_xdata() {
   xdata_ = none;
 
+  // Recurse into all children, including ACCOUNT_TEMP ones.  When --pivot is
+  // active, transfer_details creates a temporary parent account ("Invoice")
+  // and the original account hierarchy ("101", "Assets", "Receivables") is
+  // grafted underneath it.  Children of a temp account inherit ACCOUNT_TEMP
+  // (see find_account()), so skipping temp children here would leave their
+  // xdata (notably family_details.calculated) stale across --group-by
+  // groups, causing accounts_flusher in subsequent groups to return cached
+  // zero totals and silently drop the group from the output (#1034).
   for (accounts_map::value_type& pair : accounts)
-    if (!pair.second->has_flags(ACCOUNT_TEMP))
-      pair.second->clear_xdata();
+    pair.second->clear_xdata();
 }
 
 void account_t::clear_display_state() {
@@ -715,9 +722,10 @@ void account_t::clear_display_state() {
     xdata_->sort_values.clear();
   }
 
+  // Recurse into all children, including ACCOUNT_TEMP ones (see the
+  // companion comment in clear_xdata above for why this matters).
   for (accounts_map::value_type& pair : accounts)
-    if (!pair.second->has_flags(ACCOUNT_TEMP))
-      pair.second->clear_display_state();
+    pair.second->clear_display_state();
 }
 
 /*--- Account Totals ---*/
