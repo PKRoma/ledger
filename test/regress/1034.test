@@ -1,0 +1,90 @@
+; Regression test for issue #1034: --group-by and --pivot together
+; https://github.com/ledger/ledger/issues/1034
+;
+; When --group-by and --pivot were used together, only the first group's
+; output appeared and subsequent groups (including their titles) were
+; silently dropped.  Root cause: account_t::clear_xdata() skipped
+; ACCOUNT_TEMP children, leaving the family_details cache populated with a
+; stale (zero) total for accounts under the pivot's temp parent.  In the
+; second group, mark_accounts then read the cached zero from the pivoted
+; leaves, failed the display predicate, and produced no output.
+
+2011-01-01 * Opening balance
+    Assets:Cash                               25.00 GBP
+    Equity:Opening balance                   -25.00 GBP
+
+2011-02-01 * Sell to customer AAA
+    ; Customer: AAA
+    ; Invoice: 101
+    Assets:Receivables                        10.00 GBP
+    Income:Sale                              -10.00 GBP
+
+2011-02-02 * Sell to customer BBB
+    ; Customer: BBB
+    ; Invoice: 102
+    Assets:Receivables                        11.00 GBP
+    Income:Sale                              -11.00 GBP
+
+2011-02-03 * Sell to customer AAA
+    ; Customer: AAA
+    ; Invoice: 103
+    Assets:Receivables                        12.00 GBP
+    Income:Sale                              -12.00 GBP
+
+2011-02-04 * Sell to customer AAA
+    ; Customer: AAA
+    ; Invoice: 104
+    Assets:Receivables                        15.00 GBP
+    Income:Sale                              -15.00 GBP
+
+2011-02-03 * Money received from customer AAA for invoice 101
+    ; Customer: AAA
+    ; Invoice: 101
+    Assets:Cash                               10.00 GBP
+    Assets:Receivables                       -10.00 GBP
+
+; --group-by alone groups by Customer tag.
+test bal assets:receiv --group-by "tag('Customer')"
+AAA
+           27.00 GBP  Assets:Receivables
+
+BBB
+           11.00 GBP  Assets:Receivables
+end test
+
+; --pivot alone groups receivables under their Invoice tag.
+test bal assets:receiv --pivot Invoice
+           38.00 GBP  Invoice
+           11.00 GBP    102:Assets:Receivables
+           12.00 GBP    103:Assets:Receivables
+           15.00 GBP    104:Assets:Receivables
+--------------------
+           38.00 GBP
+end test
+
+; --group-by combined with --pivot must show every group that has a
+; matching posting, with the pivoted account hierarchy underneath each
+; group's title.  Before the fix, BBB's group was silently dropped.
+test bal assets:receiv --group-by "tag('Customer')" --pivot Invoice
+AAA
+           27.00 GBP  Invoice
+           12.00 GBP    103:Assets:Receivables
+           15.00 GBP    104:Assets:Receivables
+--------------------
+           27.00 GBP
+
+BBB
+           11.00 GBP  Invoice:102:Assets:Receivables
+end test
+
+; The same combination must work for register reports as well.
+test reg assets:receiv --group-by "tag('Customer')" --pivot Invoice
+AAA
+11-Feb-01 Sell to customer AAA  In:10:Asse:Receivables    10.00 GBP    10.00 GBP
+11-Feb-03 Sell to customer AAA  In:10:Asse:Receivables    12.00 GBP    22.00 GBP
+11-Feb-04 Sell to customer AAA  In:10:Asse:Receivables    15.00 GBP    37.00 GBP
+11-Feb-03 Money received from.. In:10:Asse:Receivables   -10.00 GBP    27.00 GBP
+
+BBB
+11-Feb-02 Sell to customer BBB  In:10:Asse:Receivables    11.00 GBP    11.00 GBP
+end test
