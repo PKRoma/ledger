@@ -11,3 +11,14 @@ test --anon pricedb --format "%(date) %(amount)\n"
 2012/02/01 2.00 A
 end test
 
+; Verify that the same base commodity always anonymizes to the same label,
+; even when it appears with different price annotations.  Before the fix
+; for #756, AAA{1.00 EUR} and AAA{2.00 EUR} would map to different labels
+; (e.g. A and C) because the commodity index keyed on the per-annotation
+; pointer rather than the base referent.
+test --anon reg --format "%(date) %(commodity)\n"
+2012/01/01 A
+2012/01/01 B
+2012/02/01 A
+2012/02/01 B
+end test

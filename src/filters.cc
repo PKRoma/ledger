@@ -260,19 +260,23 @@ account_t* create_temp_account_from_path(std::list<string>& account_names, tempo
  *
  * The mapping is stable: the same original commodity always maps to the same
  * label within a single anonymization pass.  Commodity flags and precision
- * are preserved from the original.
+ * are preserved from the original.  Annotated commodities (e.g.
+ * AAA{1.00 EUR} and AAA{2.00 EUR}) share the same label as their base
+ * commodity (AAA), since the index key is the referent (base) rather than
+ * the per-annotation pointer.  (#756)
  */
 void anonymize_posts::render_commodity(amount_t& amt) {
   commodity_t& comm(amt.commodity());
+  commodity_t* base = &comm.referent();
 
   std::size_t id;
   bool newly_added = false;
 
-  commodity_index_map::iterator i = comms.find(&comm);
+  commodity_index_map::iterator i = comms.find(base);
   if (i == comms.end()) {
     id = next_comm_id++;
     newly_added = true;
-    comms.insert(commodity_index_map::value_type(&comm, id));
+    comms.insert(commodity_index_map::value_type(base, id));
   } else {
     id = (*i).second;
   }
