@@ -1,0 +1,24 @@
+; Regression test for issue #739: prices/pricedb only show pricedb info for
+; commodities listed in transactions (BZ#739)
+; https://github.com/ledger/ledger/issues/739
+;
+; The `prices` and `pricedb` commands should report price history for every
+; commodity that has a P directive, not only those that are referenced by
+; some posting in the journal.
+
+P 2024/01/01 AAPL $150.00
+P 2024/01/01 GOOG $100.00
+
+2024/01/01 Buy stock
+    Assets:Investments     10 AAPL @ $150.00
+    Assets:Cash
+
+test prices
+2024/01/01 AAPL          $150.00
+2024/01/01 GOOG          $100.00
+end test
+
+test pricedb
+P 2024/01/01 00:00:00 AAPL $150.00
+P 2024/01/01 00:00:00 GOOG $100.00
+end test

@@ -42,6 +42,7 @@
 
 #include "iterators.h"
 #include "journal.h"
+#include "pool.h"
 #include "compare.h"
 
 namespace ledger {
@@ -168,6 +169,28 @@ void posts_commodities_iterator::reset(journal_t& journal) {
     if (comm.flags() & COMMODITY_NOMARKET)
       continue;
     commodities.insert(&comm.referent());
+  }
+
+  // Also include commodities whose only appearance in the journal is via a
+  // P price directive (issue #739).  Iterate the commodity pool and add any
+  // base commodity that has its own price history but is not yet in our set.
+  for (auto& pair : commodity_pool_t::current_pool->commodities) {
+    commodity_t* comm = pair.second.get();
+    if (!comm || comm->symbol().empty())
+      continue;
+    if (comm->flags() & COMMODITY_NOMARKET)
+      continue;
+    commodity_t* base = &comm->referent();
+    if (commodities.count(base))
+      continue;
+
+    // Only include the commodity if it actually has price history;
+    // otherwise we would create a spurious account named after it.
+    bool has_prices = false;
+    base->map_prices([&has_prices](datetime_t, const amount_t&) { has_prices = true; },
+                     datetime_t(), datetime_t(), bidirectional);
+    if (has_prices)
+      commodities.insert(base);
   }
 
   // Phase 2: For each commodity, walk its price history and create
