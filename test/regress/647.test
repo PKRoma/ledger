@@ -1,0 +1,86 @@
+; Regression test for issue #647: Add ability to pass offset dates to xact command
+; https://github.com/ledger/ledger/issues/647
+;
+; The xact command should accept relative date expressions ("today",
+; "yesterday", "tomorrow") as a positional first argument, and the full
+; period-expression grammar ("last month", "3 days ago", ...) via the
+; `on` preposition.  Previously only formatted dates or weekday names
+; were recognized.
+
+2024/01/15 Grocery Store
+    Expenses:Food    $50.00
+    Assets:Checking
+
+; Positional relative-date keywords
+
+test --now 2024/03/15 xact today Grocery
+2024/03/15 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact yesterday Grocery
+2024/03/14 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact tomorrow Grocery
+2024/03/16 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+; Positional short forms
+
+test --now 2024/03/15 xact tday Grocery
+2024/03/15 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact yday Grocery
+2024/03/14 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact tmrw Grocery
+2024/03/16 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+; The `on` preposition accepts the full period-expression grammar
+
+test --now 2024/03/15 xact Grocery on yesterday
+2024/03/14 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact Grocery on "last month"
+2024/02/01 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact Grocery on "3 days ago"
+2024/03/12 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+; Existing date syntaxes must continue to work
+
+test --now 2024/03/15 xact 2024/03/10 Grocery
+2024/03/10 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test
+
+test --now 2024/03/15 xact monday Grocery
+2024/03/11 Grocery Store
+    Expenses:Food                             $50.00
+    Assets:Checking
+end test

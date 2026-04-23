@@ -390,6 +390,25 @@ optional<date_time::months_of_year> string_to_month_of_year(const std::string& s
     return none;
 }
 
+/**
+ * @brief Resolve a single-word relative-date keyword to a concrete date.
+ *
+ * Recognizes the common shorthand the `xact` command accepts in place of
+ * an explicit date: "today"/"tday", "yesterday"/"yday", "tomorrow"/"tmrw".
+ * The anchor is `epoch->date()` when --now is in effect, otherwise
+ * CURRENT_DATE(), matching the conventions used elsewhere by
+ * date_interval_t::determine_when().
+ */
+optional<date_t> string_to_relative_date(const std::string& str) {
+  if (str == _("today") || str == _("tday"))
+    return epoch ? epoch->date() : CURRENT_DATE();
+  if (str == _("yesterday") || str == _("yday"))
+    return (epoch ? epoch->date() : CURRENT_DATE()) - gregorian::days(1);
+  if (str == _("tomorrow") || str == _("tmrw"))
+    return (epoch ? epoch->date() : CURRENT_DATE()) + gregorian::days(1);
+  return none;
+}
+
 /*--- Top-Level Parse Functions ---*/
 
 /**
@@ -423,6 +442,32 @@ datetime_t parse_datetime(const char* str) {
 /// @brief Parse a date string using the registered format cascade.
 date_t parse_date(const char* str) {
   return parse_date_mask(str);
+}
+
+/**
+ * @brief Parse a date string that may be a formatted date or a relative
+ *        date expression.
+ *
+ * First delegates to parse_date() (which tries each registered date format).
+ * If that fails, the string is handed to date_interval_t, which supports the
+ * full period-expression grammar: `today`/`yesterday`/`tomorrow`, `this`/
+ * `next`/`last <unit>`, `<N> <unit> ago/hence`, and so on.  Only the interval's
+ * begin date is returned; callers interested in ranges should use
+ * date_interval_t directly.
+ */
+date_t parse_date_expr(const std::string& str) {
+  try {
+    return parse_date(str);
+  } catch (const date_error&) { // NOLINT(bugprone-empty-catch)
+    // Fall through to the richer period-expression grammar.
+  }
+
+  date_interval_t interval(str);
+  if (optional<date_t> when = interval.begin())
+    return *when;
+
+  throw_(date_error, _f("Invalid date: %1%") % str);
+  return date_t();
 }
 
 /*--- Date Specifier Resolution ---*/
