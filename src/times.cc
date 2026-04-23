@@ -458,7 +458,7 @@ date_t parse_date(const char* str) {
 date_t parse_date_expr(const std::string& str) {
   try {
     return parse_date(str);
-  } catch (const date_error&) {
+  } catch (const date_error&) { // NOLINT(bugprone-empty-catch)
     // Fall through to the richer period-expression grammar.
   }
 
