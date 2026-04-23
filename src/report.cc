@@ -2100,7 +2100,7 @@ expr_t::ptr_op_t report_t::lookup(const symbol_t::kind_t kind, const string& nam
 
     case 's':
       if (is_eq(p, "stats") || is_eq(p, "stat"))
-        return WRAP_FUNCTOR(report_statistics);
+        return POSTS_REPORTER(new report_statistics(*this));
       else if (is_eq(p, "select"))
         return WRAP_FUNCTOR(select_command);
       break;

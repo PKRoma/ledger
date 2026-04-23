@@ -41,12 +41,41 @@
  */
 #pragma once
 
-#include "value.h"
+#include "account.h"
+#include "chain.h"
 
 namespace ledger {
 
-class call_scope_t;
+class report_t;
 
-value_t report_statistics(call_scope_t& scope);
+/**
+ * @brief Accumulates statistics over the filtered posting stream for the `stats` command.
+ *
+ * Participates in the normal post filter chain, so `--begin`, `--end`,
+ * `-p`, `--limit`, and other query filters apply to the reported
+ * statistics.  An earlier free-function implementation walked the entire
+ * journal unconditionally, ignoring all such filters (issue #742).
+ */
+class report_statistics : public item_handler<post_t> {
+protected:
+  report_t& report;                         ///< The report context.
+  account_t::xdata_t::details_t statistics; ///< Accumulated statistics.
+
+public:
+  report_statistics(report_t& _report) : report(_report) {
+    TRACE_CTOR(report_statistics, "report&");
+  }
+  ~report_statistics() override { TRACE_DTOR(report_statistics); }
+
+  /// @brief Emit the accumulated statistics.
+  void flush() override;
+  /// @brief Incorporate a single (filtered) posting into the statistics.
+  void operator()(post_t& post) override;
+
+  void clear() override {
+    statistics = account_t::xdata_t::details_t();
+    item_handler<post_t>::clear();
+  }
+};
 
 } // namespace ledger
