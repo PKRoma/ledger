@@ -648,8 +648,8 @@ void commodity_history_impl_t::print_map(std::ostream& out, const datetime_t& mo
   } else {
     using EdgeFilter = recent_edge_weight<EdgeWeightMap, PricePointMap, PriceRatioMap>;
     using VFGraph = filtered_graph<Graph, EdgeFilter, non_builtin_vertex_predicate<NameMap>>;
-    VFGraph vfg(price_graph,
-                EdgeFilter(get(edge_weight, price_graph), pricemap, ratiomap, moment), vpred);
+    VFGraph vfg(price_graph, EdgeFilter(get(edge_weight, price_graph), pricemap, ratiomap, moment),
+                vpred);
     write_graphviz(out, vfg, label_writer<NameMap>(namemap));
   }
 }
