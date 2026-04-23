@@ -53,9 +53,14 @@ value_t report_statistics(call_scope_t& args) {
   assert(is_valid(statistics.earliest_post));
   assert(is_valid(statistics.latest_post));
 
+  // Use inclusive day count: a single-day period spans 1 day, not 0.
+  // This also prevents division by zero when computing the per-day rate
+  // for journals whose transactions all fall on the same date.
+  long period_days =
+      (statistics.latest_post - statistics.earliest_post).days() + 1;
+
   out << format(_f("Time period: %1% to %2% (%3% days)") % format_date(statistics.earliest_post) %
-                format_date(statistics.latest_post) %
-                (statistics.latest_post - statistics.earliest_post).days())
+                format_date(statistics.latest_post) % period_days)
       << '\n'
       << '\n';
 
@@ -82,8 +87,7 @@ value_t report_statistics(call_scope_t& args) {
 
   out << " (";
   out.precision(2);
-  out << (double(statistics.posts_count) /
-          double((statistics.latest_post - statistics.earliest_post).days()))
+  out << (double(statistics.posts_count) / double(period_days))
       << _(" per day)") << '\n';
 
   out << _("  Uncleared postings:     ");

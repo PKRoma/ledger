@@ -20,7 +20,7 @@
     Assets:Checking
 
 test --now 2024/03/01 stats
-Time period: 24-Jan-01 to 24-Feb-15 (45 days)
+Time period: 24-Jan-01 to 24-Feb-15 (46 days)
 
   Files these postings came from:
     $FILE
@@ -28,7 +28,7 @@ Time period: 24-Jan-01 to 24-Feb-15 (45 days)
   Unique payees:               4
   Unique accounts:             4
 
-  Number of postings:          8 (0.18 per day)
+  Number of postings:          8 (0.17 per day)
   Uncleared postings:          8
 
   Days since last post:       15
