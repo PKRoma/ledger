@@ -155,6 +155,7 @@ void export_account() {
       .def_readonly("earliest_cleared_post", &account_t::xdata_t::details_t::earliest_cleared_post)
       .def_readonly("latest_post", &account_t::xdata_t::details_t::latest_post)
       .def_readonly("latest_cleared_post", &account_t::xdata_t::details_t::latest_cleared_post)
+      .def_readonly("latest_past_post", &account_t::xdata_t::details_t::latest_past_post)
 
       .def_readonly("filenames", &account_t::xdata_t::details_t::filenames)
       .def_readonly("accounts_referenced", &account_t::xdata_t::details_t::accounts_referenced)

@@ -673,6 +673,9 @@ account_t::xdata_t::details_t& account_t::xdata_t::details_t::operator+=(const d
   if (!is_valid(latest_cleared_post) ||
       (is_valid(other.latest_cleared_post) && other.latest_cleared_post > latest_cleared_post))
     latest_cleared_post = other.latest_cleared_post;
+  if (!is_valid(latest_past_post) ||
+      (is_valid(other.latest_past_post) && other.latest_past_post > latest_past_post))
+    latest_past_post = other.latest_past_post;
 
   filenames.insert(other.filenames.begin(), other.filenames.end());
   accounts_referenced.insert(other.accounts_referenced.begin(), other.accounts_referenced.end());
@@ -860,14 +863,23 @@ void account_t::xdata_t::details_t::update(post_t& post, bool gather_all) {
     filenames.insert(post.pos->pathname);
 
   date_t date = post.date();
+  date_t today = CURRENT_DATE();
 
-  if (date.year() == CURRENT_DATE().year() && date.month() == CURRENT_DATE().month())
-    posts_this_month_count++;
+  // Recency counters should only include postings that have actually
+  // occurred on or before today; future-dated postings must not inflate
+  // the "in last N days" or "this month" tallies (issue #741).
+  if (date <= today) {
+    if (date.year() == today.year() && date.month() == today.month())
+      posts_this_month_count++;
 
-  if ((CURRENT_DATE() - date).days() <= 30)
-    posts_last_30_count++;
-  if ((CURRENT_DATE() - date).days() <= 7)
-    posts_last_7_count++;
+    if ((today - date).days() <= 30)
+      posts_last_30_count++;
+    if ((today - date).days() <= 7)
+      posts_last_7_count++;
+
+    if (!is_valid(latest_past_post) || date > latest_past_post)
+      latest_past_post = date;
+  }
 
   if (!is_valid(earliest_post) || post.date() < earliest_post)
     earliest_post = post.date();
