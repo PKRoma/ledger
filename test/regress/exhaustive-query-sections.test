@@ -59,10 +59,13 @@ test reg Food show Expenses -> 0
 end test
 
 ; 2. only section: limit + only
-; The limit selects Food postings; only further restricts to Dining subaccount.
+; The limit selects Food postings; only further restricts display to the
+; Dining subaccount.  The running total accumulates ALL Food postings
+; (including non-Dining ones, which are filtered out at display time only).
+; See #762.
 test reg Food only Dining -> 0
-24-Jan-03 Restaurant            Expenses:Food:Dining         $50.00       $50.00
-24-Mar-01 Coffee Shop           Expenses:Food:Dining         $15.00       $65.00
+24-Jan-03 Restaurant            Expenses:Food:Dining         $50.00       $75.00
+24-Mar-01 Coffee Shop           Expenses:Food:Dining         $15.00      $125.00
 end test
 
 ; 3. show with no limit (empty limit)
@@ -183,19 +186,23 @@ test reg Food show Expenses for 2024/01 -> 0
 end test
 
 ; 15. limit + only + for (three sections)
-; Limit selects Expenses postings; only further restricts to Food; for
-; constrains to January 2024.
+; Limit selects Expenses postings; only further restricts display to Food;
+; for constrains to January 2024.  Running total accumulates ALL Expenses
+; in January, including the Gas posting between the two Food entries that
+; bumps the second Food's running total to $115 ($25 + $40 + $50).  See #762.
 test reg Expenses only Food for 2024/01 -> 0
 24-Jan-01 Grocery Store         Expenses:Food                $25.00       $25.00
-24-Jan-03 Restaurant            Expenses:Food:Dining         $50.00       $75.00
+24-Jan-03 Restaurant            Expenses:Food:Dining         $50.00      $115.00
 end test
 
 ; 16. limit + show + only (two display sections)
-; Limit selects Expenses postings; show filters display to Food; only
-; further restricts display to Dining.
+; Limit selects Expenses postings; show and only both further restrict
+; display.  Running total accumulates ALL Expenses postings (including the
+; non-displayed ones), so the displayed Dining entries show their position
+; in the full Expenses chain.  See #762.
 test reg Expenses show Food only Dining -> 0
-24-Jan-03 Restaurant            Expenses:Food:Dining         $50.00       $50.00
-24-Mar-01 Coffee Shop           Expenses:Food:Dining         $15.00       $65.00
+24-Jan-03 Restaurant            Expenses:Food:Dining         $50.00      $115.00
+24-Mar-01 Coffee Shop           Expenses:Food:Dining         $15.00      $295.00
 end test
 
 ; 17. since + show

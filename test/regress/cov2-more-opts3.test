@@ -43,8 +43,12 @@ test reg --limit "amount>10"
 end test
 
 ; Test --only option
+; Running total reflects ALL postings (including filtered-out ones), so the
+; balance shown carries the AAPL purchase and Cash offset that were excluded
+; from display by the predicate.  See #762.
 test reg --only "amount>10"
-24-Jan-15 Payee Two             Expenses:Gas                 $20.00       $20.00
+24-Jan-15 Payee Two             Expenses:Gas                 $20.00     $-980.00
+                                                                         10 AAPL
 end test
 
 ; Test --begin option

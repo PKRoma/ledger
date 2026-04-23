@@ -20,10 +20,14 @@ test reg Expenses show Dining
 end test
 
 ; Test 'only' clause (query.cc , TOK_ONLY)
+; Running totals reflect ALL postings (including the Cash side that gets
+; filtered out by the predicate), so each Expenses entry shows its own
+; per-posting amount as the displayed total (Cash entries cancel them).
+; See #762.
 test reg only Expenses
 24-Jan-01 Grocery Store         Expenses:Food                $10.00       $10.00
-24-Feb-01 Gas Station           Expenses:Gas                 $20.00       $30.00
-24-Mar-01 Restaurant            Expenses:Dining              $30.00       $60.00
+24-Feb-01 Gas Station           Expenses:Gas                 $20.00       $20.00
+24-Mar-01 Restaurant            Expenses:Dining              $30.00       $30.00
 end test
 
 ; Test 'for' clause (query.cc , TOK_FOR)

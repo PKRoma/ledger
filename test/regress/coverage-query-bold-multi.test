@@ -22,7 +22,10 @@ test bal Expenses bold Food Gas -> 0
              $115.00
 end test
 
+; The 'only' clause filters AFTER calculation, so the Cash postings
+; (excluded from display) still cancel the running total: each remaining
+; Expenses entry shows its own amount as the running total.  See #762.
 test reg only Food Dining -> 0
 24-Jan-01 Grocery Store         Expenses:Food                $25.00       $25.00
-24-Jan-03 Restaurant            Expenses:Dining              $50.00       $75.00
+24-Jan-03 Restaurant            Expenses:Dining              $50.00       $50.00
 end test
