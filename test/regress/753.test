@@ -1,0 +1,57 @@
+; Regression test for issue #753: prices -A and --deviation had no effect
+; https://github.com/ledger/ledger/issues/753
+;
+; --average (-A) rewrites display_total into the running average of the
+; posted amount, and --deviation further transforms it into
+; "display_amount - display_total" (the deviation from that average).
+; Neither option touches display_amount.  The default prices format used
+; to print display_amount unconditionally, so both options appeared to be
+; silently ignored.  The default format now selects display_total when
+; either option is active so the running average (and, with --deviation,
+; the deviation from that average) shows up in the price column.
+
+D 1000.00 GBP
+
+P 2012-01-01 EUR 1.00 GBP
+P 2012-01-02 EUR 2.00 GBP
+P 2012-01-03 EUR 3.00 GBP
+P 2012-01-04 EUR 4.00 GBP
+
+2012-01-01 * Opening
+    Assets          10.00 EUR
+    Equity
+
+; Without any modifier, the prices command prints the raw price history.
+test prices
+2012/01/01 EUR          1.00 GBP
+2012/01/02 EUR          2.00 GBP
+2012/01/03 EUR          3.00 GBP
+2012/01/04 EUR          4.00 GBP
+end test
+
+; --average (-A) replaces the price column with the running average:
+;   1, (1+2)/2, (1+2+3)/3, (1+2+3+4)/4
+test prices -A
+2012/01/01 EUR          1.00 GBP
+2012/01/02 EUR          1.50 GBP
+2012/01/03 EUR          2.00 GBP
+2012/01/04 EUR          2.50 GBP
+end test
+
+; --deviation combined with -A prints each price's deviation from the
+; running average: 1-1=0, 2-1.5=0.5, 3-2=1, 4-2.5=1.5.
+test prices -A --deviation
+2012/01/01 EUR                 0
+2012/01/02 EUR          0.50 GBP
+2012/01/03 EUR          1.00 GBP
+2012/01/04 EUR          1.50 GBP
+end test
+
+; --daily (-D) collapses same-day prices to the last price of each day.
+; With one price per day it is a no-op and matches the plain report.
+test prices -D
+2012/01/01 EUR          1.00 GBP
+2012/01/02 EUR          2.00 GBP
+2012/01/03 EUR          3.00 GBP
+2012/01/04 EUR          4.00 GBP
+end test
