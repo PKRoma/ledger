@@ -1,0 +1,101 @@
+; Regression test for issue #742: ledger stats ignores -p until (BZ#742)
+; https://github.com/ledger/ledger/issues/742
+;
+; The stats command must respect the period specification (`-p "until DATE"`),
+; --end, --begin, and --limit filters.  Prior to the fix, the stats command
+; walked the entire journal unconditionally via family_details(), so those
+; filters were silently ignored.  With the command now participating in the
+; post filter chain, its output reflects the restricted range.
+
+2012-02-28 * Test
+    E               30.00 EUR
+    F
+
+2012-02-29 * Test
+    E               30.00 EUR
+    F
+
+2012-03-24 * Test
+    A               30.00 EUR
+    B
+
+; -p "until DATE" expands to "date < DATE", so "until 2012-03-01" includes
+; Feb 28 and Feb 29 only.  The statistics must reflect just those two
+; transactions: 2 accounts (E, F) rather than all 4, and 4 postings rather
+; than 6.  `--now` pins CURRENT_DATE() so the recency counters are stable.
+test stats -p "until 2012-03-01" --now "2012-03-31"
+Time period: 12-Feb-28 to 12-Feb-29 (2 days)
+
+  Files these postings came from:
+    $FILE
+
+  Unique payees:               1
+  Unique accounts:             2
+
+  Number of postings:          4 (2 per day)
+  Uncleared postings:          0
+
+  Days since last post:       31
+  Posts in last 7 days:        0
+  Posts in last 30 days:       0
+  Posts seen this month:       0
+end test
+
+; --end 2012/03/01 is equivalent to -p "until 2012-03-01" for stats purposes.
+test stats --end 2012/03/01 --now "2012-03-31"
+Time period: 12-Feb-28 to 12-Feb-29 (2 days)
+
+  Files these postings came from:
+    $FILE
+
+  Unique payees:               1
+  Unique accounts:             2
+
+  Number of postings:          4 (2 per day)
+  Uncleared postings:          0
+
+  Days since last post:       31
+  Posts in last 7 days:        0
+  Posts in last 30 days:       0
+  Posts seen this month:       0
+end test
+
+; --begin excludes postings before the date.  "--begin 2012/03/01" excludes
+; Feb 28 and Feb 29, leaving just the 2012-03-24 transaction.
+test stats --begin 2012/03/01 --now "2012-03-31"
+Time period: 12-Mar-24 to 12-Mar-24 (1 days)
+
+  Files these postings came from:
+    $FILE
+
+  Unique payees:               1
+  Unique accounts:             2
+
+  Number of postings:          2 (2 per day)
+  Uncleared postings:          0
+
+  Days since last post:        7
+  Posts in last 7 days:        2
+  Posts in last 30 days:       2
+  Posts seen this month:       2
+end test
+
+; Account queries reach stats through the --limit predicate, so filtering
+; by account name must also narrow the reported statistics.
+test stats ^A --now "2012-03-31"
+Time period: 12-Mar-24 to 12-Mar-24 (1 days)
+
+  Files these postings came from:
+    $FILE
+
+  Unique payees:               1
+  Unique accounts:             1
+
+  Number of postings:          1 (1 per day)
+  Uncleared postings:          0
+
+  Days since last post:        7
+  Posts in last 7 days:        1
+  Posts in last 30 days:       1
+  Posts seen this month:       1
+end test
