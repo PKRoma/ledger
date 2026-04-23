@@ -1,0 +1,44 @@
+; Regression test for issue #761: Make uncommoditized amounts behave like
+; commoditized ones (BZ#761)
+; https://github.com/ledger/ledger/issues/761
+;
+; When the "D" directive specifies a default commodity format without a
+; commodity symbol (e.g. "D 1.000,00"), the thousands separator and
+; decimal-comma style should be applied to subsequent bare (uncommoditized)
+; amounts so that they display with the same format.
+;
+; Before the fix, the observed numeric format of a bare D amount was
+; discarded because the parsed amount had no commodity to attach the
+; style to; bare posting amounts printed without separators.
+
+D 1.000,00
+
+2012-03-29 * foo
+    foo:bar    123.456,78
+    bar:foo
+
+2024/01/02 another
+    foo:bar    5.000,99
+    bar:foo
+
+2024/01/03 negative
+    foo:bar    -999,75
+    bar:foo
+
+; Balance shows all bare amounts in European format.
+test bal
+         -127.458,02  bar:foo
+          127.458,02  foo:bar
+--------------------
+                   0
+end test
+
+; Register view shows each bare amount in European format.
+test reg
+12-Mar-29 foo                   foo:bar                  123.456,78   123.456,78
+                                bar:foo                 -123.456,78            0
+24-Jan-02 another               foo:bar                    5.000,99     5.000,99
+                                bar:foo                   -5.000,99            0
+24-Jan-03 negative              foo:bar                     -999,75      -999,75
+                                bar:foo                      999,75            0
+end test
