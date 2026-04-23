@@ -1,0 +1,63 @@
+; Regression test for issue #764: csv: posted should be renamed to aux_date or aux or auxdate (BZ#764)
+; https://github.com/ledger/ledger/issues/764
+;
+; The CSV convert command recognizes only the column name "posted" as the
+; auxiliary date field (FIELD_DATE_AUX).  This test exercises the additional
+; aliases "aux", "aux_date", "aux date", and "auxdate" (as well as the
+; multi-word "posted date" form), which previously all collided with the
+; unanchored "date" pattern and were mistakenly captured as the primary date.
+
+account Expenses:Unknown
+account Assets:Checking
+
+; "posted" column is recognized as the auxiliary date.
+test convert test/regress/764-posted.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01=2024/01/15 * Grocery Store
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test
+
+; "aux_date" column is recognized as the auxiliary date.
+test convert test/regress/764-aux-date.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01=2024/01/15 * Grocery Store
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test
+
+; "aux" column (without a "date" suffix) is recognized as the auxiliary date.
+test convert test/regress/764-aux.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01=2024/01/15 * Grocery Store
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test
+
+; "auxdate" column (no separator) is recognized as the auxiliary date.
+test convert test/regress/764-auxdate.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01=2024/01/15 * Grocery Store
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test
+
+; "aux date" column (space separator) is recognized as the auxiliary date.
+test convert test/regress/764-aux-space.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01=2024/01/15 * Grocery Store
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test
+
+; "posted date" column (space separator) is recognized as the auxiliary date.
+test convert test/regress/764-posted-date.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01=2024/01/15 * Grocery Store
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test
+
+; Column names that merely contain "aux" (e.g. "auxiliary") are NOT
+; misinterpreted as the auxiliary date; they fall through to the unknown-tag
+; handler.
+test convert test/regress/764-auxiliary.csv --account Assets:Checking --input-date-format "%Y/%m/%d"
+2024/01/01 * Grocery Store
+    ; auxiliary: some-info
+    Expenses:Unknown                             -10
+    Assets:Checking
+end test

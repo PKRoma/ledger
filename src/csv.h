@@ -146,8 +146,11 @@ public:
    */
   csv_reader(parse_context_t& _context, char _separator = ',')
       : context(_context), separator(_separator),
-        masks{std::make_pair(mask_t("date"), FIELD_DATE),
-              std::make_pair(mask_t("posted( ?date)?"), FIELD_DATE_AUX),
+        masks{// Match the auxiliary date column before the generic "date" pattern so
+              // header names such as "aux_date" or "posted date" are not swallowed
+              // by the substring match against "date".
+              std::make_pair(mask_t("^(aux([_ ]?date)?|posted( ?date)?)$"), FIELD_DATE_AUX),
+              std::make_pair(mask_t("date"), FIELD_DATE),
               std::make_pair(mask_t("code"), FIELD_CODE),
               std::make_pair(mask_t("(payee|desc(ription)?|title)"), FIELD_PAYEE),
               std::make_pair(mask_t("credit|amount"), FIELD_CREDIT),
