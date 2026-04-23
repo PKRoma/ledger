@@ -31,24 +31,23 @@
 
 #include <system.hh>
 
-#include "draft.h"
-#include "xact.h"
+#include "stats.h"
+
 #include "post.h"
-#include "account.h"
 #include "report.h"
-#include "session.h"
+#include "xact.h"
 
 namespace ledger {
 
-value_t report_statistics(call_scope_t& args) {
-  report_t& report(find_scope<report_t>(args));
+void report_statistics::operator()(post_t& post) {
+  statistics.update(post, /* gather_all= */ true);
+}
+
+void report_statistics::flush() {
   std::ostream& out(report.output_stream);
 
-  const account_t::xdata_t::details_t& statistics(
-      report.session.journal->master->family_details(true));
-
   if (!is_valid(statistics.earliest_post) && !is_valid(statistics.latest_post))
-    return NULL_VALUE;
+    return;
 
   assert(is_valid(statistics.earliest_post));
   assert(is_valid(statistics.latest_post));
@@ -115,8 +114,6 @@ value_t report_statistics(call_scope_t& args) {
   out << statistics.posts_this_month_count << '\n';
 
   out.flush();
-
-  return NULL_VALUE;
 }
 
 } // namespace ledger

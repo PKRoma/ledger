@@ -207,6 +207,12 @@ public:
   void posts_report(post_handler_ptr handler);
   /// @brief Overload that preserves the handler chain in @a saved_chain for later use.
   void posts_report(post_handler_ptr handler, post_handler_ptr& saved_chain);
+  /// @brief Run a posting-based report that only needs query filtering (e.g. stats).
+  /// Applies only the pre-post filter chain (--limit, --begin, --end, -p, account
+  /// queries, budget/forecast synthesis) and skips the calc/display/sort chain
+  /// used by register-style reports.  Suitable for handlers that consume filtered
+  /// posts directly without needing running totals or amount expressions.
+  void posts_report_quick(post_handler_ptr handler);
   /// @brief Run a report using randomly generated postings (for testing).
   void generate_report(post_handler_ptr handler);
   /// @brief Run a report over a single transaction's postings (for xact/draft commands).

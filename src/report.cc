@@ -527,6 +527,15 @@ void report_t::posts_report(post_handler_ptr handler, post_handler_ptr& saved_ch
     posts_flusher(handler, *this)(value_t());
 }
 
+void report_t::posts_report_quick(post_handler_ptr handler) {
+  handler = chain_pre_post_handlers(handler, *this);
+
+  journal_posts_iterator walker(*session.journal.get());
+  pass_down_posts<journal_posts_iterator>(handler, walker); // NOLINT(bugprone-unused-raii)
+
+  posts_flusher(handler, *this)(value_t());
+}
+
 void report_t::generate_report(post_handler_ptr handler) {
   handler = chain_handlers(handler, *this);
 
@@ -2100,7 +2109,7 @@ expr_t::ptr_op_t report_t::lookup(const symbol_t::kind_t kind, const string& nam
 
     case 's':
       if (is_eq(p, "stats") || is_eq(p, "stat"))
-        return WRAP_FUNCTOR(report_statistics);
+        return POSTS_REPORTER_(&report_t::posts_report_quick, new report_statistics(*this));
       else if (is_eq(p, "select"))
         return WRAP_FUNCTOR(select_command);
       break;

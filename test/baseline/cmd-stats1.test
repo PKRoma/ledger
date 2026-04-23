@@ -1,3 +1,9 @@
+; A journal that contains only automated (`=`) and periodic (`~`)
+; transactions has no real postings to report on.  The stats command now
+; correctly produces no output in this case, since it participates in the
+; post filter chain rather than walking template postings attached to
+; accounts during parse-time finalization.
+
 = /^Income:/
     (Liabilities:Tithe)                   0.10
 
@@ -6,19 +12,4 @@
     Equity
 
 test stats --now "2023-02-06"
-Time period: 23-Feb-06 to 23-Feb-06 (1 days)
-
-  Files these postings came from:
-    $FILE
-
-  Unique payees:               1
-  Unique accounts:             1
-
-  Number of postings:          1 (1 per day)
-  Uncleared postings:          1
-
-  Days since last post:        0
-  Posts in last 7 days:        1
-  Posts in last 30 days:       1
-  Posts seen this month:       1
 end test
