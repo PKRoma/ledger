@@ -68,19 +68,24 @@ public:
   ~amount_error() noexcept override {}
 };
 
-enum parse_flags_enum_t : uint8_t {
-  PARSE_DEFAULT = 0x00,
-  PARSE_PARTIAL = 0x01,
-  PARSE_SINGLE = 0x02,
-  PARSE_NO_MIGRATE = 0x04,
-  PARSE_NO_REDUCE = 0x08,
-  PARSE_NO_ASSIGN = 0x10,
-  PARSE_NO_ANNOT = 0x20,
-  PARSE_OP_CONTEXT = 0x40,
-  PARSE_SOFT_FAIL = 0x80
+enum parse_flags_enum_t : uint16_t {
+  PARSE_DEFAULT = 0x0000,
+  PARSE_PARTIAL = 0x0001,
+  PARSE_SINGLE = 0x0002,
+  PARSE_NO_MIGRATE = 0x0004,
+  PARSE_NO_REDUCE = 0x0008,
+  PARSE_NO_ASSIGN = 0x0010,
+  PARSE_NO_ANNOT = 0x0020,
+  PARSE_OP_CONTEXT = 0x0040,
+  PARSE_SOFT_FAIL = 0x0080,
+  /// When set, bare amounts (no commodity symbol) transfer their
+  /// observed numeric-format flags to null_commodity so that
+  /// subsequent bare amounts display with the same separators.  Used
+  /// by the D directive to propagate format from a bare amount.
+  PARSE_APPLY_STYLE_TO_BARE = 0x0100
 };
 
-using parse_flags_t = flags::basic_t<parse_flags_enum_t, uint_least8_t>;
+using parse_flags_t = flags::basic_t<parse_flags_enum_t, uint_least16_t>;
 
 /**
  * @brief Encapsulate infinite-precision commoditized amounts

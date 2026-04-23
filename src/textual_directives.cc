@@ -147,12 +147,21 @@ void instance_t::clock_out_directive(char* line, bool capitalized) {
 /*--- Legacy Single-Character Directives ---*/
 
 void instance_t::default_commodity_directive(char* line) {
-  amount_t amt(skip_ws(line + 1));
+  // Parse with PARSE_APPLY_STYLE_TO_BARE so that a bare D directive
+  // like "D 1.000,00" (no commodity symbol) transfers its format
+  // (thousands separator, decimal comma) and precision to
+  // null_commodity.  This makes subsequent bare amounts display with
+  // the same format (issue #761).
+  amount_t amt;
+  std::istringstream stream(skip_ws(line + 1));
+  (void)amt.parse(stream, PARSE_APPLY_STYLE_TO_BARE);
   VERIFY(amt.valid());
   commodity_pool_t::current_pool->default_commodity = &amt.commodity();
   amt.commodity().add_flags(COMMODITY_KNOWN);
   // Set COMMODITY_STYLE_NO_MIGRATE to lock the format and prevent
-  // observational formatting from overriding it (issue #1197)
+  // observational formatting from overriding it (issue #1197).  When
+  // the directive is bare, amt.commodity() returns null_commodity, so
+  // this also locks null_commodity's newly-installed style.
   amt.commodity().add_flags(COMMODITY_STYLE_NO_MIGRATE);
 }
 
