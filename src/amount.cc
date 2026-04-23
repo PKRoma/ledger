@@ -1786,8 +1786,7 @@ bool amount_t::parse(std::istream& in, const parse_flags_t& flags) {
     } else if (new_quantity->prec > commodity().precision()) {
       commodity().set_precision(new_quantity->prec);
     }
-  } else if (!commodity_ && !no_migrate_style &&
-             flags.has_flags(PARSE_APPLY_STYLE_TO_BARE)) {
+  } else if (!commodity_ && !no_migrate_style && flags.has_flags(PARSE_APPLY_STYLE_TO_BARE)) {
     // For bare amounts parsed from a D directive, apply only the
     // numeric-formatting style flags (thousands separator and
     // decimal-comma choice) to null_commodity so that subsequent bare
@@ -1796,9 +1795,9 @@ bool amount_t::parse(std::istream& in, const parse_flags_t& flags) {
     // The D directive locks the style afterwards by setting
     // COMMODITY_STYLE_NO_MIGRATE on null_commodity, preventing further
     // bare-amount parses from mutating it (#761).
-    const commodity_t::flags_t numeric_flags =
-        COMMODITY_STYLE_THOUSANDS | COMMODITY_STYLE_DECIMAL_COMMA |
-        COMMODITY_STYLE_THOUSANDS_APOSTROPHE;
+    const commodity_t::flags_t numeric_flags = COMMODITY_STYLE_THOUSANDS |
+                                               COMMODITY_STYLE_DECIMAL_COMMA |
+                                               COMMODITY_STYLE_THOUSANDS_APOSTROPHE;
     commodity().add_flags(comm_flags & numeric_flags);
     if (new_quantity->prec > commodity().precision())
       commodity().set_precision(new_quantity->prec);
