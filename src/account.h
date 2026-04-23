@@ -296,6 +296,7 @@ public:
       date_t earliest_cleared_post; ///< Date of the earliest cleared posting.
       date_t latest_post;           ///< Date of the most recent posting.
       date_t latest_cleared_post;   ///< Date of the most recent cleared posting.
+      date_t latest_past_post;      ///< Most recent posting whose date is not in the future.
 
       datetime_t earliest_checkin;  ///< Earliest timeclock check-in timestamp.
       datetime_t latest_checkout;   ///< Latest timeclock check-out timestamp.

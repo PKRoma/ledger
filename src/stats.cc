@@ -92,9 +92,15 @@ value_t report_statistics(call_scope_t& args) {
 
   out << '\n';
 
+  // Use latest_past_post (most recent non-future posting) so that
+  // future-dated transactions don't yield negative "days since" values.
+  // Fall back to latest_post only if every posting is in the future.
   out << _("  Days since last post:   ");
   out.width(6);
-  out << (CURRENT_DATE() - statistics.latest_post).days() << '\n';
+  out << (CURRENT_DATE() - (is_valid(statistics.latest_past_post) ? statistics.latest_past_post
+                                                                  : statistics.latest_post))
+             .days()
+      << '\n';
 
   out << _("  Posts in last 7 days:   ");
   out.width(6);
