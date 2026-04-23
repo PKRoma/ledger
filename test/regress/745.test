@@ -1,0 +1,55 @@
+; Regression test for issue #745: ledger budget: Error: Cannot multiply an amount with a balance
+; https://github.com/ledger/ledger/issues/745
+;
+; Previously, running `ledger budget` on a journal where actual postings
+; produced a multi-commodity balance under a budgeted parent account caused:
+;   "Error: Cannot multiply an amount with a balance"
+;
+; The failure came from the budget format's percentage column, which computes
+; `100% * display_total[0] / -display_total[1]`.  When display_total[0] is a
+; multi-commodity balance (here, 12.00 EUR + 550.00 GBP at Expenses), the
+; multiplication against the 100% amount raised a value_error.
+;
+; The fix (commit c28f1324b, originally for issue #1957) replaced the bare
+; scrub() calls in the percentage expression with quantity(), which returns 0
+; for multi-commodity balances, and added a zero-guard around the divisor so
+; the column prints "0" instead of crashing.  This test uses the exact journal
+; from the bug report to confirm the budget report now completes successfully.
+
+~ Monthly
+    Expenses:Phone            10.00 GBP
+    Expenses:Rent            550.00 GBP
+    Assets
+
+2012-01-10 * Phone expense on holidays
+    Expenses:Phone            12.00 EUR @@ 10.00 GBP
+    Assets:Cash              -10.00 GBP
+
+2012-01-31 * Rent expense
+    Expenses:Rent            550.00 GBP
+    Assets:Cash             -550.00 GBP
+
+test budget --period 'January 2012' --no-color
+ -560.00 GBP  -560.00 GBP            0  100%  Assets
+   12.00 EUR
+  550.00 GBP   560.00 GBP    12.00 EUR
+                            -10.00 GBP     0  Expenses
+   12.00 EUR    10.00 GBP    12.00 EUR
+                            -10.00 GBP  120%    Phone
+  550.00 GBP   550.00 GBP            0  100%    Rent
+------------ ------------ ------------ -----
+   12.00 EUR
+  -10.00 GBP            0    12.00 EUR
+                            -10.00 GBP     0
+end test
+
+test budget --period 'January 2012' --no-color --flat
+ -560.00 GBP  -560.00 GBP            0  100%  Assets
+   12.00 EUR    10.00 GBP    12.00 EUR
+                            -10.00 GBP  120%  Expenses:Phone
+  550.00 GBP   550.00 GBP            0  100%  Expenses:Rent
+------------ ------------ ------------ -----
+   12.00 EUR
+  -10.00 GBP            0    12.00 EUR
+                            -10.00 GBP     0
+end test
