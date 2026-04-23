@@ -338,6 +338,13 @@ value_t get_use_direct_amount(post_t& post) {
  * post.amount for the commodity.  Calling to_amount() on a sequence throws,
  * and for budget filtering purposes the underlying amount's commodity is the
  * correct thing to check (issue #2247).
+ *
+ * Similarly, when the compound value is a balance holding more than one
+ * commodity (e.g., under -H when earlier postings could not all be
+ * converted to the target commodity), to_amount() would throw "Cannot
+ * convert a balance with multiple commodities to an amount" (issue #763).
+ * In that case fall back to post.amount's commodity, which reflects the
+ * posting's actual commodity and matches what a -l filter sees.
  */
 value_t get_commodity(call_scope_t& args) {
   if (args.has<amount_t>(0)) {
@@ -352,20 +359,23 @@ value_t get_commodity(call_scope_t& args) {
   } else {
     post_t& post(args.context<post_t>());
     if (post.has_xdata() && post.xdata().has_flags(POST_EXT_COMPOUND) &&
-        !post.xdata().compound_value.is_sequence())
-      return post.xdata().compound_value.to_amount().commodity().strip_annotations(
-          keep_details_t{});
-    else
-      return post.amount.commodity().strip_annotations(keep_details_t{});
+        !post.xdata().compound_value.is_sequence()) {
+      const value_t& cv(post.xdata().compound_value);
+      if (!cv.is_balance() || cv.as_balance().single_amount())
+        return cv.to_amount().commodity().strip_annotations(keep_details_t{});
+    }
+    return post.amount.commodity().strip_annotations(keep_details_t{});
   }
 }
 
 value_t get_commodity_is_primary(post_t& post) {
   if (post.has_xdata() && post.xdata().has_flags(POST_EXT_COMPOUND) &&
-      !post.xdata().compound_value.is_sequence())
-    return post.xdata().compound_value.to_amount().commodity().has_flags(COMMODITY_PRIMARY);
-  else
-    return post.amount.commodity().has_flags(COMMODITY_PRIMARY);
+      !post.xdata().compound_value.is_sequence()) {
+    const value_t& cv(post.xdata().compound_value);
+    if (!cv.is_balance() || cv.as_balance().single_amount())
+      return cv.to_amount().commodity().has_flags(COMMODITY_PRIMARY);
+  }
+  return post.amount.commodity().has_flags(COMMODITY_PRIMARY);
 }
 
 value_t get_has_cost(post_t& post) {
