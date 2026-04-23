@@ -45,9 +45,9 @@
  *
  * - **chain_post_handlers()** adds the inner filters: injection, related
  *   posts, transfer_details, interval grouping, aggregation (subtotal,
- *   by-payee, day-of-week, equity), collapse, sorting, the --only predicate,
- *   calc_posts, revaluation, display filtering, truncation, and the
- *   forecast-while predicate.
+ *   by-payee, day-of-week, equity), collapse, sorting, calc_posts,
+ *   revaluation, the --only predicate, display filtering, truncation, and
+ *   the forecast-while predicate.
  *
  * Both functions build the chain from the inside out: each new handler wraps
  * the previous one, so the last handler added is the first to receive
@@ -222,6 +222,20 @@ post_handler_ptr chain_post_handlers(post_handler_ptr base_handler, report_t& re
       handler = std::make_shared<filter_posts>(handler, display_predicate, report);
     }
 
+    // filter_posts will only pass through posts matching the `only' (a.k.a.
+    // "secondary") predicate.  Placed downstream of calc_posts, revaluation,
+    // and display_filter_posts so that running totals (and the rounding
+    // adjustments fed by display_filter_posts' incremental accumulator)
+    // reflect ALL postings; --only then suppresses non-matching posts from
+    // the displayed output without altering the accumulated total.  This is
+    // what distinguishes --only from --limit: --limit excludes postings
+    // from calculation entirely, while --only keeps them in the running
+    // total but hides them from the report.  See #762.
+    if (report.HANDLED(only_)) {
+      only_predicate = predicate_t(report.HANDLER(only_).str(), report.what_to_keep());
+      handler = std::make_shared<filter_posts>(handler, only_predicate, report);
+    }
+
     // display_filter_posts adds virtual posts to the list to account
     // for changes in value of commodities, which otherwise would affect
     // the running total unpredictably.  Placed before filter_posts so
@@ -250,6 +264,17 @@ post_handler_ptr chain_post_handlers(post_handler_ptr base_handler, report_t& re
             (report.HANDLED(revalued) || (!report.HANDLED(base) && default_exprs)));
     display_filter = display_filter_sp.get();
     handler = std::move(display_filter_sp);
+  }
+
+  /*--- Only predicate (accounts reports) ---*/
+
+  // For accounts reports there is no display_filter_posts, so the --only
+  // filter sits directly between calc_posts and the output handler.  This
+  // mirrors the position used for register reports above, while keeping
+  // the running total computed over ALL postings.  See #762.
+  if (for_accounts_report && report.HANDLED(only_)) {
+    only_predicate = predicate_t(report.HANDLER(only_).str(), report.what_to_keep());
+    handler = std::make_shared<filter_posts>(handler, only_predicate, report);
   }
 
   /*--- Revaluation and calculation ---*/
@@ -290,15 +315,6 @@ post_handler_ptr chain_post_handlers(post_handler_ptr base_handler, report_t& re
     bool period_average = report.HANDLED(average) && !will_collapse;
     handler = std::make_shared<calc_posts>(handler, expr, calc_running, maintain_stripped, wtk,
                                            period_average);
-  }
-
-  /*--- Only predicate ---*/
-
-  // filter_posts will only pass through posts matching the
-  // `secondary_predicate'.
-  if (report.HANDLED(only_)) {
-    only_predicate = predicate_t(report.HANDLER(only_).str(), report.what_to_keep());
-    handler = std::make_shared<filter_posts>(handler, only_predicate, report);
   }
 
   /*--- Sorting, collapsing, and aggregation ---*/
