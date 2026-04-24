@@ -538,15 +538,24 @@ void instance_t::end_apply_directive(char* kind) {
 /*--- Account Directives ---*/
 
 void instance_t::account_directive(char* line) {
+  account_directive_body(line, top_account(), 0);
+}
+
+void instance_t::account_directive_body(char* line, account_t* parent,
+                                        std::size_t outer_indent) {
   std::istream::pos_type beg_pos = context.line_beg_pos;
   std::size_t beg_linenum = context.linenum;
 
   char* p = skip_ws(line);
-  account_t* account = context.journal->register_account(p, nullptr, top_account());
+  account_t* account = context.journal->register_account(p, nullptr, parent);
   account->add_flags(ACCOUNT_KNOWN);
   unique_ptr<auto_xact_t> ae;
 
-  while (peek_whitespace_line()) {
+  while (true) {
+    std::size_t next_indent = peek_line_indent();
+    if (next_indent == 0 || next_indent <= outer_indent)
+      break;
+
     read_line(line);
     char* q = skip_ws(line);
     if (!*q)
@@ -566,6 +575,11 @@ void instance_t::account_directive(char* line) {
       account_value_directive(account, b);
     } else if (keyword == "default") {
       account_default_directive(account);
+    } else if (keyword == "account") {
+      // Nested account declaration (issue #877): register a child account
+      // using the enclosing account as its parent, avoiding the need to
+      // repeat the full colon-separated path.
+      account_directive_body(b, account, next_indent);
     } else if (keyword == "assert" || keyword == "check") {
       keep_details_t keeper(true, true, true);
       string safe_name = account->fullname();
