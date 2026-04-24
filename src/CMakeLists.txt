@@ -257,8 +257,11 @@ if(USE_PYTHON)
       TARGET libledger POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
       $<TARGET_FILE:libledger> "${CMAKE_BINARY_DIR}/${_ledger_python_module_name}")
+    # Use PROGRAMS (not FILES) so the installed Python extension module has
+    # executable permissions (mode 755).  Fedora and other distributions
+    # require dynamic libraries to be installed with the executable bit set.
     install(
-      FILES "${CMAKE_BINARY_DIR}/${_ledger_python_module_name}"
+      PROGRAMS "${CMAKE_BINARY_DIR}/${_ledger_python_module_name}"
       DESTINATION "${LEDGER_PYTHON_INSTALL_DIR}")
   else()
     message(WARNING "Python_SITEARCH not set. Will not install python module.")
