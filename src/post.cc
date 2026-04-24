@@ -443,8 +443,7 @@ value_t get_price(post_t& post) {
   if (post.amount.is_null())
     return 0L;
   if (post.amount.has_annotation() && post.amount.annotation().price) {
-    if (post.given_cost &&
-        !post.amount.annotation().has_flags(ANNOTATION_PRICE_CALCULATED))
+    if (post.given_cost && !post.amount.annotation().has_flags(ANNOTATION_PRICE_CALCULATED))
       return *post.given_cost;
     if (post.cost && post.amount.annotation().has_flags(ANNOTATION_PRICE_CALCULATED))
       return *post.cost;
