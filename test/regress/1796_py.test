@@ -1,0 +1,11 @@
+test python test/regress/1796.py
+xact flags=0 has_flags(ITEM_GENERATED)=False
+  post Expenses:Food: flags=0 has_flags(ITEM_GENERATED)=False has_flags(POST_VIRTUAL)=False
+  post Assets:Cash: flags=0 has_flags(ITEM_GENERATED)=False has_flags(POST_VIRTUAL)=False
+xact flags=0 has_flags(ITEM_GENERATED)=False
+  post Virtual:Envelope: flags=16 has_flags(ITEM_GENERATED)=False has_flags(POST_VIRTUAL)=True
+  post Expenses:Supplies: flags=0 has_flags(ITEM_GENERATED)=False has_flags(POST_VIRTUAL)=False
+  post Assets:Cash: flags=0 has_flags(ITEM_GENERATED)=False has_flags(POST_VIRTUAL)=False
+after add_flags: has_flags(ITEM_GENERATED)=True
+after drop_flags: has_flags(ITEM_GENERATED)=False
+end test
