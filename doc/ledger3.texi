@@ -6571,11 +6571,16 @@ Display only transactions on or before the current date.
 
 @item --begin @var{DATE}
 @itemx -b @var{DATE}
-Limit the processing to transactions on or after @var{DATE}.
+Limit the processing to transactions on or after @var{DATE}.  @var{DATE}
+may include a time component, e.g.@: @code{"2018/12/16 08:12:33"} or
+@code{2018/12/16@@08:12:33} (the @code{@@} separator avoids shell
+quoting); the filter then matches by full datetime instead of by whole
+day, which is useful with timelog entries or sub-daily price records.
 
 @item --end @var{DATE}
 @itemx -e @var{DATE}
-Limit the processing to transactions before @var{DATE}.
+Limit the processing to transactions before @var{DATE}.  A time
+component is accepted with the same forms described for @option{--begin}.
 
 @item --period @var{PERIOD_EXPRESSION}
 @itemx -p @var{PERIOD_EXPRESSION}
