@@ -404,7 +404,15 @@ bool xact_base_t::finalize() {
       const amount_t* x = &(*a++).second;
       const amount_t* y = &(*a++).second;
 
-      if (*x && *y) {
+      // Use is_realzero() rather than operator bool() here: the latter tests
+      // is_nonzero() which respects the commodity's display precision, so an
+      // amount like -0.001 B with `format 1000.00 B` (precision 2) would be
+      // treated as zero and skip the conversion, yielding a spurious
+      // "Transaction does not balance" error (issue #1789).  For the purpose
+      // of inferring a conversion price, only the true underlying value
+      // matters -- a divide-by-zero is only possible when the amount is
+      // exactly zero.
+      if (!x->is_realzero() && !y->is_realzero()) {
         if (x->commodity() != top_post->amount.commodity())
           std::swap(x, y);
 

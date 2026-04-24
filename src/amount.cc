@@ -763,7 +763,12 @@ amount_t& amount_t::operator/=(const amount_t& amt) {
       throw_(amount_error, _("Cannot divide two uninitialized amounts"));
   }
 
-  if (!amt)
+  // Use is_realzero() rather than operator bool() (== is_nonzero() == !is_zero()):
+  // the latter treats an amount as zero when its exact value rounds to zero at
+  // the commodity's display precision, but division is a mathematical operation
+  // on the exact rational value.  A divide-by-zero happens only when the actual
+  // value is zero, not when it merely displays as zero (issue #1789).
+  if (amt.is_realzero())
     throw_(amount_error, _("Divide by zero"));
 
   _dup();
