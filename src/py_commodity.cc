@@ -350,6 +350,7 @@ void export_commodity() {
       .def("__nonzero__", &commodity_t::operator bool)
 
       .def(self == self)
+      .def(self == other<string>())
 
       .def("symbol_needs_quotes", &commodity_t::symbol_needs_quotes)
       .staticmethod("symbol_needs_quotes")
