@@ -55,6 +55,8 @@
 #include "pool.h"
 #include "history.h"
 #include "quotes.h"
+#include "expr.h"
+#include "scope.h"
 
 namespace ledger {
 
@@ -486,7 +488,46 @@ commodity_pool_t::parse_price_directive(char* line, bool do_not_add_price, bool 
 
   price_point_t point;
   point.when = datetime;
-  (void)point.price.parse(symbol_and_price, PARSE_NO_MIGRATE);
+
+  // A parenthesized price expression (issue #1101) allows the price to be
+  // computed from an expression which may reference multiple commodities,
+  // e.g. "P 2015-01-01 bicur (€0.45 + $0.55)".  The enclosing parentheses
+  // signal that the remaining text should be parsed as a value expression
+  // rather than as a plain amount.  If the expression evaluates to a
+  // multi-commodity balance (a "basket"), the result is attached as a
+  // value_expr on the commodity so that later valuations can reprice the
+  // basket into whatever target commodity is requested.  Otherwise the
+  // collapsed amount is recorded as a normal price history entry.
+  char* price_ptr = skip_ws(symbol_and_price);
+  if (price_ptr && *price_ptr == '(') {
+    expr_t value_expr{string(price_ptr)};
+    value_t result(value_expr.calc(scope_t::default_scope ? *scope_t::default_scope
+                                                          : *scope_t::empty_scope));
+    if (result.is_balance() && result.as_balance().amounts.size() > 1) {
+      // Store the literal balance as the commodity's value expression so
+      // that find_price_from_expr can reprice it to whatever target
+      // commodity is requested at query time.
+      std::ostringstream expr_text;
+      expr_text << '(';
+      bool first = true;
+      for (const auto& pair : result.as_balance().amounts) {
+        if (!first)
+          expr_text << " + ";
+        pair.second.print(expr_text);
+        first = false;
+      }
+      expr_text << ')';
+      if (commodity_t* commodity = find_or_create(symbol)) {
+        commodity->set_value_expr(expr_t(expr_text.str()));
+        commodity->add_flags(COMMODITY_KNOWN);
+        return std::pair<commodity_t*, price_point_t>(commodity, point);
+      }
+      return std::nullopt;
+    }
+    point.price = result.to_amount();
+  } else {
+    (void)point.price.parse(symbol_and_price, PARSE_NO_MIGRATE);
+  }
   VERIFY(point.price.valid());
 
   // Update the price commodity's precision based on the parsed amount.
