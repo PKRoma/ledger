@@ -103,6 +103,21 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        # LLVM coverage instrumentation generates several GB of .profraw data
+        # across the full test suite; the default ubuntu-latest image has been
+        # running out of disk space mid-test, aborting the runner with
+        # "No space left on device". Remove preinstalled toolchains that
+        # this job does not need before checkout.
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
       - uses: actions/checkout@v6
         name: Check out repository code
 
