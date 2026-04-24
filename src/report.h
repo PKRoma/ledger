@@ -598,8 +598,8 @@ public:
         // or "2018/12/16@08:12:33"), filter by the full datetime so that
         // timelog sessions or intra-day events can be bounded precisely.
         if (optional<datetime_t> begin_dt = try_parse_datetime(str)) {
-          OTHER(limit_).on(
-              whence, "datetime>=to_datetime(\"" + format_datetime(*begin_dt, FMT_WRITTEN) + "\")");
+          OTHER(limit_).on(whence, "datetime>=to_datetime(\"" +
+                                       format_datetime(*begin_dt, FMT_WRITTEN) + "\")");
           date_t begin_date = begin_dt->date();
           if (!parent->origin || begin_date < *parent->origin)
             parent->origin = begin_date;
@@ -843,8 +843,8 @@ public:
         // users restrict timelog sessions, or market-value snapshots, to a
         // precise instant instead of a whole-day boundary.
         if (optional<datetime_t> end_dt = try_parse_datetime(str)) {
-          OTHER(limit_).on(
-              whence, "datetime<to_datetime(\"" + format_datetime(*end_dt, FMT_WRITTEN) + "\")");
+          OTHER(limit_).on(whence, "datetime<to_datetime(\"" +
+                                       format_datetime(*end_dt, FMT_WRITTEN) + "\")");
           // The instant itself is excluded, so value prices one second earlier.
           parent->terminus = *end_dt - seconds(1);
           return;
