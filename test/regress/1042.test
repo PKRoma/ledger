@@ -1,0 +1,64 @@
+; Regression test for issue #1042: Allow reg and bal on tag: tag should
+; become the account name.
+; https://github.com/ledger/ledger/issues/1042
+;
+; The original feature request asked for a way to "run reg and bal over the
+; tag to get info", with the tag key becoming part of the account name so
+; that postings carrying the same tag could be aggregated together.  The
+; --pivot option provides this capability: it rewrites each posting's
+; account to "TAG:VALUE:ORIGINAL_ACCOUNT", allowing both register and
+; balance reports to group postings by the requested tag.
+;
+; This test uses the exact journal fragment from the original issue.
+
+2014-04-30 * Hotel stay (2 nights)
+    ; Nights:: 2
+    Assets:Rewards                                         10 MR
+    Income:Rewards                                        -10 MR
+
+2014-05-11 * Hotel stay (4 nights)
+    ; Nights:: 4
+    Assets:Rewards                                         20 MR
+    Income:Rewards                                        -20 MR
+
+; `reg --pivot Nights` rewrites each posting's account to be prefixed by the
+; tag name and value, making the tag groupable in a register report.
+test reg --pivot Nights
+14-Apr-30 Hotel stay (2 nights) Night:2:Assets:Rewards        10 MR        10 MR
+14-Apr-30 Hotel stay (2 nights) Night:2:Income:Rewards       -10 MR            0
+14-May-11 Hotel stay (4 nights) Night:4:Assets:Rewards        20 MR        20 MR
+14-May-11 Hotel stay (4 nights) Night:4:Income:Rewards       -20 MR            0
+end test
+
+; `bal --pivot Nights` groups postings hierarchically by tag value.
+test bal --pivot Nights
+                   0  Nights
+                   0    2
+               10 MR      Assets:Rewards
+              -10 MR      Income:Rewards
+                   0    4
+               20 MR      Assets:Rewards
+              -20 MR      Income:Rewards
+--------------------
+                   0
+end test
+
+; With --flat, balance shows the fully-qualified pivoted account names.
+test bal --pivot Nights --flat
+               10 MR  Nights:2:Assets:Rewards
+              -10 MR  Nights:2:Income:Rewards
+               20 MR  Nights:4:Assets:Rewards
+              -20 MR  Nights:4:Income:Rewards
+--------------------
+                   0
+end test
+
+; Filtering by a pivoted account name selects only postings whose tag
+; value matches.  Here, only the 4-nights transaction is selected.
+test bal --pivot Nights Nights:4
+                   0  Nights:4
+               20 MR    Assets:Rewards
+              -20 MR    Income:Rewards
+--------------------
+                   0
+end test
