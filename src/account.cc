@@ -295,6 +295,162 @@ std::ostream& operator<<(std::ostream& out, const account_t& account) {
   return out;
 }
 
+/*--- Metadata Operations ---*/
+
+namespace {
+/**
+ * @brief Case-insensitive ordering used when lazily creating an account
+ *        metadata map.  Mirrors the comparator in item.cc so account
+ *        tags use the same name-matching semantics as item tags.
+ */
+struct AccountKeyCompare {
+  bool operator()(const string& s1, const string& s2) const {
+    return boost::algorithm::ilexicographical_compare(s1, s2);
+  }
+};
+} // namespace
+
+bool account_t::has_tag(const string& tag, bool inherit) const {
+  if (metadata && metadata->find(tag) != metadata->end())
+    return true;
+  if (inherit && parent && parent->parent)
+    return parent->has_tag(tag, inherit);
+  return false;
+}
+
+bool account_t::has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask,
+                        bool inherit) const {
+  if (metadata) {
+    for (const item_t::string_map::value_type& data : *metadata) {
+      if (tag_mask.match(data.first)) {
+        if (!value_mask)
+          return true;
+        else if (data.second.first)
+          return value_mask->match(data.second.first->to_string());
+      }
+    }
+  }
+  if (inherit && parent && parent->parent)
+    return parent->has_tag(tag_mask, value_mask, inherit);
+  return false;
+}
+
+std::optional<value_t> account_t::get_tag(const string& tag, bool inherit) const {
+  if (metadata) {
+    item_t::string_map::const_iterator i = metadata->find(tag);
+    if (i != metadata->end())
+      return i->second.first;
+  }
+  if (inherit && parent && parent->parent)
+    return parent->get_tag(tag, inherit);
+  return std::nullopt;
+}
+
+std::optional<value_t> account_t::get_tag(const mask_t& tag_mask,
+                                          const std::optional<mask_t>& value_mask,
+                                          bool inherit) const {
+  if (metadata) {
+    for (const item_t::string_map::value_type& data : *metadata) {
+      if (tag_mask.match(data.first) &&
+          (!value_mask ||
+           (data.second.first && value_mask->match(data.second.first->to_string())))) {
+        return data.second.first;
+      }
+    }
+  }
+  if (inherit && parent && parent->parent)
+    return parent->get_tag(tag_mask, value_mask, inherit);
+  return std::nullopt;
+}
+
+item_t::string_map::iterator account_t::set_tag(const string& tag,
+                                                const std::optional<value_t>& value,
+                                                bool overwrite_existing) {
+  assert(!tag.empty());
+
+  if (!metadata)
+    metadata = item_t::string_map(AccountKeyCompare());
+
+  std::optional<value_t> data = value;
+  if (data && (data->is_null() || (data->is_string() && data->as_string().empty())))
+    data = std::nullopt;
+
+  item_t::string_map::iterator i = metadata->find(tag);
+  if (i == metadata->end()) {
+    auto [iter, inserted] =
+        metadata->insert(item_t::string_map::value_type(tag, item_t::tag_data_t(data, false)));
+    assert(inserted);
+    return iter;
+  }
+  if (overwrite_existing)
+    i->second = item_t::tag_data_t(data, false);
+  return i;
+}
+
+void account_t::parse_tags(const char* p, scope_t& scope, bool overwrite_existing) {
+  // Unlike item_t::parse_tags, accounts have no dates, so `[date]` brackets
+  // are ignored here -- we only scan for `:tag1:tag2:` bare tags and the
+  // `Key: value` / `Key:: expr` metadata forms.
+  if (!std::strchr(p, ':'))
+    return;
+
+  string str(p);
+  string::size_type pos = 0;
+
+  string tag;
+  bool by_value = false;
+  bool first = true;
+
+  while (pos < str.length()) {
+    pos = str.find_first_not_of(" \t", pos);
+    if (pos == string::npos)
+      break;
+
+    string::size_type end = str.find_first_of(" \t", pos);
+    if (end == string::npos)
+      end = str.length();
+
+    string token = str.substr(pos, end - pos);
+    if (token.length() < 2) {
+      pos = end;
+      continue;
+    }
+
+    if (token[0] == ':' && token[token.length() - 1] == ':') { // a series of tags
+      string tag_str(token, 1, token.length() - 2);
+      std::vector<string> tag_names;
+      boost::split(tag_names, tag_str, boost::is_any_of(":"));
+      for (const string& tag_name : tag_names) {
+        if (!tag_name.empty()) {
+          item_t::string_map::iterator i = set_tag(tag_name, std::nullopt, overwrite_existing);
+          i->second.second = true;
+        }
+      }
+    } else if (first && token[token.length() - 1] == ':') { // a metadata setting
+      std::size_t index = 1;
+      if (token[token.length() - 2] == ':') {
+        by_value = true;
+        index = 2;
+      }
+      tag = token.substr(0, token.length() - index);
+
+      item_t::string_map::iterator i;
+      string field(p + end);
+      trim(field);
+      if (by_value) {
+        bind_scope_t bound_scope(scope, *this);
+        i = set_tag(tag, expr_t(field).calc(bound_scope), overwrite_existing);
+      } else {
+        i = set_tag(tag, string_value(field), overwrite_existing);
+      }
+      i->second.second = true;
+      break;
+    }
+    first = false;
+    pos = end;
+  }
+}
+
 /*--- Expression Bindings ---*/
 
 namespace {
@@ -364,6 +520,60 @@ value_t get_depth(account_t& account) {
 
 value_t get_note(account_t& account) {
   return account.note ? string_value(*account.note) : NULL_VALUE;
+}
+
+value_t has_tag(call_scope_t& args) {
+  account_t& account(args.context<account_t>());
+
+  if (args.size() == 1) {
+    if (args[0].is_string())
+      return account.has_tag(args.get<string>(0));
+    else if (args[0].is_mask())
+      return account.has_tag(args.get<mask_t>(0));
+    else
+      throw_(std::runtime_error,
+             _f("Expected string or mask for argument 1, but received %1%") % args[0].label());
+  } else if (args.size() == 2) {
+    if (args[0].is_mask() && args[1].is_mask())
+      return account.has_tag(args.get<mask_t>(0), args.get<mask_t>(1));
+    else
+      throw_(std::runtime_error,
+             _f("Expected masks for arguments 1 and 2, but received %1% and %2%") %
+                 args[0].label() % args[1].label());
+  } else if (args.size() == 0) {
+    throw_(std::runtime_error, _("Too few arguments to function"));
+  } else {
+    throw_(std::runtime_error, _("Too many arguments to function"));
+  }
+  return false;
+}
+
+value_t get_tag(call_scope_t& args) {
+  account_t& account(args.context<account_t>());
+  std::optional<value_t> val;
+
+  if (args.size() == 1) {
+    if (args[0].is_string())
+      val = account.get_tag(args.get<string>(0));
+    else if (args[0].is_mask())
+      val = account.get_tag(args.get<mask_t>(0));
+    else
+      throw_(std::runtime_error,
+             _f("Expected string or mask for argument 1, but received %1%") % args[0].label());
+  } else if (args.size() == 2) {
+    if (args[0].is_mask() && args[1].is_mask())
+      val = account.get_tag(args.get<mask_t>(0), args.get<mask_t>(1));
+    else
+      throw_(std::runtime_error,
+             _f("Expected masks for arguments 1 and 2, but received %1% and %2%") %
+                 args[0].label() % args[1].label());
+  } else if (args.size() == 0) {
+    throw_(std::runtime_error, _("Too few arguments to function"));
+  } else {
+    throw_(std::runtime_error, _("Too many arguments to function"));
+  }
+
+  return val ? *val : NULL_VALUE;
 }
 
 value_t ignore(account_t&) {
@@ -546,6 +756,13 @@ expr_t::ptr_op_t account_t::lookup(const symbol_t::kind_t kind, const string& fn
   case 'h':
     if (fn_name == "has_children_to_display")
       return WRAP_FUNCTOR(get_wrapper<&get_has_children_to_display>);
+    else if (fn_name == "has_tag" || fn_name == "has_meta")
+      return WRAP_FUNCTOR(ledger::has_tag);
+    break;
+
+  case 'm':
+    if (fn_name == "meta")
+      return WRAP_FUNCTOR(ledger::get_tag);
     break;
 
   case 'i':
@@ -588,7 +805,9 @@ expr_t::ptr_op_t account_t::lookup(const symbol_t::kind_t kind, const string& fn
     break;
 
   case 't':
-    if (fn_name == "total")
+    if (fn_name == "tag")
+      return WRAP_FUNCTOR(ledger::get_tag);
+    else if (fn_name == "total")
       return WRAP_FUNCTOR(get_wrapper<&get_total>);
     break;
 

@@ -622,6 +622,18 @@ void instance_t::account_directive_body(char* line, account_t* parent, std::size
     if (!*q)
       break;
 
+    // A comment line under an account directive (e.g.
+    // `    ; Contribution: 12.97 EUR`) carries metadata tags for the
+    // account rather than a sub-directive.  Parsing it through
+    // account_t::parse_tags makes the `:tag:` and `Key: value` forms
+    // available to balance-format expressions such as
+    // `%(tag("Contribution"))` (issue #1681).
+    if (*q == ';' || *q == '#' || *q == '*' || *q == '|') {
+      char* body = skip_ws(q + 1);
+      account->parse_tags(body, *context.scope, true);
+      continue;
+    }
+
     char* b = next_element(q);
     string keyword(q);
     // Ensure there's an argument for the directives that need one.
