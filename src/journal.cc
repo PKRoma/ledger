@@ -98,6 +98,9 @@ journal_t::~journal_t() {
   for (period_xact_t* xact : period_xacts)
     checked_delete(xact);
 
+  // Clear the account-scoped check index first: it holds non-owning
+  // pointers into auto_xacts, which we are about to destroy below.
+  account_check_xacts.clear();
   // Clear auto_xacts before deleting master to avoid use-after-free:
   // auto_xact_t destructors call remove_post on accounts owned by master.
   auto_xacts.clear();
@@ -609,9 +612,25 @@ void journal_t::extend_xact(xact_base_t* xact) {
   for (unique_ptr<auto_xact_t>& auto_xact : auto_xacts)
     if (!auto_xact->posts.empty())
       auto_xact->extend_xact(*xact, *current_context);
+  // Skip auto_xacts that are scoped to a specific account; those are
+  // dispatched below via `account_check_xacts` to avoid the O(m*n) scan
+  // pattern described in issue #562.
   for (unique_ptr<auto_xact_t>& auto_xact : auto_xacts)
-    if (auto_xact->posts.empty())
+    if (auto_xact->posts.empty() && auto_xact->scoped_to_account == nullptr)
       auto_xact->extend_xact(*xact, *current_context);
+  // Dispatch account-scoped check directives via the per-account index.
+  // Snapshot posts after posting-generating auto_xacts have run so that
+  // generated postings are checked too (matching prior #1680 behavior).
+  if (!account_check_xacts.empty()) {
+    posts_list initial_posts(xact->posts.begin(), xact->posts.end());
+    for (post_t* post : initial_posts) {
+      auto it = account_check_xacts.find(post->reported_account());
+      if (it == account_check_xacts.end())
+        continue;
+      for (auto_xact_t* axe : it->second)
+        axe->apply_checks_to_post(*post, *current_context);
+    }
+  }
 }
 
 bool journal_t::remove_xact(xact_t* xact) {

@@ -288,6 +288,14 @@ public:
   bool enabled;         ///< If false, this auto transaction is skipped entirely. Can be toggled by
                         ///< directives.
 
+  /// If non-null, this auto_xact applies only to postings whose reported
+  /// account is exactly this account (no hierarchical descent).  Created
+  /// by `account <name> / check <expr>` directives, which are indexed by
+  /// the journal via `account_check_xacts` so that extend_xact() can
+  /// dispatch them via O(1) account lookup instead of scanning the full
+  /// auto_xacts list for every posting.  See issue #562.
+  account_t* scoped_to_account = nullptr;
+
   optional<expr_t::check_expr_list>
       check_exprs; ///< Optional assertion/check expressions evaluated when the predicate matches.
 
@@ -379,6 +387,18 @@ public:
    * balances.
    */
   virtual void extend_xact(xact_base_t& xact, parse_context_t& context);
+
+  /**
+   * @brief Evaluate check_exprs against a single posting, skipping the
+   *        predicate.
+   *
+   * Fast path used by journal_t::extend_xact() for account-scoped check
+   * directives that are indexed by account.  The caller guarantees the
+   * posting's account matches `scoped_to_account`, so the predicate is
+   * not re-evaluated.  No template postings are generated and deferred
+   * notes are not applied (account directives cannot carry those).
+   */
+  void apply_checks_to_post(post_t& initial_post, parse_context_t& context);
 };
 
 /**

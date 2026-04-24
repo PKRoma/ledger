@@ -601,8 +601,13 @@ void instance_t::account_directive(char* line) {
     ae->journal = context.journal;
     ae->pos->end_pos = in.tellg();
     ae->pos->end_line = context.linenum;
-
+    // Mark this auto_xact as scoped to `account` and index it so that
+    // journal_t::extend_xact() can dispatch it via O(1) account lookup
+    // rather than scanning every auto_xact for every posting.  See #562.
+    ae->scoped_to_account = account;
+    auto_xact_t* ae_ptr = ae.get();
     context.journal->auto_xacts.push_back(std::move(ae));
+    context.journal->account_check_xacts[account].push_back(ae_ptr);
   }
 }
 
