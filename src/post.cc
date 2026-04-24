@@ -418,22 +418,34 @@ value_t get_cost(post_t& post) {
 }
 
 /**
- * @brief Return the total value at the lot price from the amount's annotation.
+ * @brief Return the total value at the transaction price for this posting.
  *
- * If the amount has a lot price annotation, returns that price times
- * the quantity.  When the annotation price was computed from a total
- * cost (@@) and the original total cost is still available on the
- * posting, uses the original cost directly to avoid rounding artifacts
- * from multiplying a rounded per-unit price back by the quantity
- * (issue #3009).
+ * When the user supplied both a lot-price annotation and a separate `@`
+ * (or `@@`) transaction cost -- e.g. "-1 OPT {{$1294.20}} @ $1295.00" --
+ * the annotation records the lot basis while the @ cost is the actual
+ * price realized at the moment of exchange.  --price (-I) reports the
+ * latter so that gains and losses are visible in the priced account;
+ * the lot basis remains available through --basis (-B) (issue #1806).
  *
- * Otherwise falls back to the cost (which equals the amount when
- * there is no currency conversion).
+ * Posting finalization rewrites `post.cost` to equal the lot basis
+ * (see xact.cc, `*post->cost += gain_loss`), so the original @ cost is
+ * recovered from `post.given_cost` which is preserved by the parser.
+ *
+ * When the annotation price was itself computed from the @ cost
+ * (ANNOTATION_PRICE_CALCULATED), there is no separate transaction
+ * price to distinguish -- annotation and cost agree -- and we fall
+ * back to `post.cost` (this preserves #3009's handling for @@ costs).
+ *
+ * With no cost at all, returns the lot-basis total from the annotation,
+ * matching the previous behavior for amounts like "10 AAPL {$5}".
  */
 value_t get_price(post_t& post) {
   if (post.amount.is_null())
     return 0L;
   if (post.amount.has_annotation() && post.amount.annotation().price) {
+    if (post.given_cost &&
+        !post.amount.annotation().has_flags(ANNOTATION_PRICE_CALCULATED))
+      return *post.given_cost;
     if (post.cost && post.amount.annotation().has_flags(ANNOTATION_PRICE_CALCULATED))
       return *post.cost;
     return *post.amount.price();
