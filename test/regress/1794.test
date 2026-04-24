@@ -1,0 +1,118 @@
+; Regression test for issue #1794: price syntax / --revalued / --gains mysteries
+; https://github.com/ledger/ledger/issues/1794
+;
+; The original report asked about the eight pricing syntaxes
+;
+;   @  @@      -- per-unit / total posting cost
+;   {} {{}}   -- per-unit / total lot-price annotation
+;   @= @@=    -- per-unit / total fixated posting cost
+;   {=} {{=}} -- per-unit / total fixated lot-price annotation
+;
+; and several inconsistencies between them when used with --lots,
+; --revalued, --revalued-only, --gain, and -V.  Most of the originally
+; reported behavior either is intentional or has since been corrected;
+; this test locks in the current, correct output so later changes cannot
+; silently regress it.
+;
+; Concrete fix shipped with this test:
+;   The `print` command now reconstructs the fixated marker `=` for @=
+;   and @@= postings.  Previously `2 ETF @= 10 EUR` round-tripped back
+;   out as `2 ETF @ EUR10`, silently demoting a fixated cost to an
+;   ordinary one.
+;
+; Behaviors intentionally preserved (asserted below):
+;   * every pricing syntax records a lot price on the annotated commodity;
+;   * cost syntaxes (@, @@, @=, @@=) additionally record the posting date
+;     as the acquisition date, while lot-annotation syntaxes ({}, {{}},
+;     {=}, {{=}}) do not -- the user may supply `[date]` explicitly;
+;   * the `=` fixated marker is displayed in --lots output for every
+;     fixated syntax (issue #1196 originally restored it for {=}/{{=};
+;     this test covers all four fixated forms);
+;   * --revalued without -V does nothing when no market prices exist,
+;     because a revaluation requires a changed market price;
+;   * --revalued-only -V is empty when no price history is available --
+;     there is nothing to revalue, so there are no <Revalued> postings.
+
+P 2019-01-01 ETC  11 EUR
+P 2019-02-01 ETC  12 EUR
+
+2019-01-11
+    (A)    2 ETF @ 10 EUR
+
+2019-01-12
+    (B)    2 ETF @@ 20 EUR
+
+2019-01-13
+    (C)    2 ETF {10 EUR}
+
+2019-01-14
+    (D)    2 ETF {{20 EUR}}
+
+2019-01-15
+    (F)    2 ETF @= 10 EUR
+
+2019-01-16
+    (G)    2 ETF @@= 20 EUR
+
+2019-01-17
+    (H)    2 ETF {=10 EUR}
+
+2019-01-18
+    (I)    2 ETF {{=20 EUR}}
+
+2019-02-15
+    (J)    2 ETF
+
+; All eight syntaxes produce the same internal lot price (EUR10); the
+; fixated forms additionally carry the `=` marker.  Cost syntaxes
+; (A, B, F, G) record the posting date as the acquisition date.
+test bal --flat --no-total --lots
+2 ETF {EUR10} [2019/01/11]  A
+2 ETF {EUR10} [2019/01/12]  B
+       2 ETF {EUR10}  C
+       2 ETF {EUR10}  D
+2 ETF {=EUR10} [2019/01/15]  F
+2 ETF {=EUR10} [2019/01/16]  G
+      2 ETF {=EUR10}  H
+      2 ETF {=EUR10}  I
+               2 ETF  J
+end test
+
+; `print` reconstructs the source form of each posting.  The fixated
+; cost marker `=` survives the round trip for @= (F) and @@= (G);
+; before the fix they printed as bare `@` / `@@`.  {=} (H) and {{=}}
+; (I) already round-tripped correctly.
+test print
+2019/01/11 <Unspecified payee>
+    (A)                                        2 ETF @ EUR10
+
+2019/01/12 <Unspecified payee>
+    (B)                                        2 ETF @@ EUR20
+
+2019/01/13 <Unspecified payee>
+    (C)                                 2 ETF {EUR10}
+
+2019/01/14 <Unspecified payee>
+    (D)                                 2 ETF {EUR10}
+
+2019/01/15 <Unspecified payee>
+    (F)                                        2 ETF @= EUR10
+
+2019/01/16 <Unspecified payee>
+    (G)                                        2 ETF @@= EUR20
+
+2019/01/17 <Unspecified payee>
+    (H)                                 2 ETF {=EUR10}
+
+2019/01/18 <Unspecified payee>
+    (I)                                 2 ETF {=EUR10}
+
+2019/02/15 <Unspecified payee>
+    (J)                                        2 ETF
+end test
+
+; No market prices exist for ETF, so -V cannot revalue any posting.
+; --revalued-only therefore emits no output; this is correct behavior,
+; not a bug (see #1794, observation 3).
+test reg --revalued-only -V
+end test

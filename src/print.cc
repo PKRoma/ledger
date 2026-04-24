@@ -413,6 +413,11 @@ void print_xact(report_t& report, std::ostream& out, xact_t& xact) {
           cost_op = "@";
         if (post->has_flags(POST_COST_VIRTUAL))
           cost_op = "(" + cost_op + ")"; // NOLINT(performance-inefficient-string-concatenation)
+        // A fixated cost is indicated by a `=` immediately after the @ or @@,
+        // locking the lot price so it is not migrated as a market price.  Round-
+        // trip the marker when printing so `@= price` and `@@= price` survive.
+        if (post->has_flags(POST_COST_FIXATED))
+          cost_op += "=";
 
         if (post->has_flags(POST_COST_IN_FULL))
           amtbuf << " " << cost_op << " " << post->given_cost->abs();
