@@ -47,6 +47,10 @@
 
 - Add yday shortcut for "yesterday"
 
+- Allow nested `account` sub-directives inside an `account` block so a
+  parent account can declare its children without repeating the full
+  colon-separated path (issue #877)
+
 ### File Handling
 
 - Skip files with invalid UTF-8 names in include directive (bug #2421)
