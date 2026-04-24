@@ -85,6 +85,56 @@
 
 namespace ledger {
 
+namespace {
+
+/// Parse a --price-exp / --leeway duration string into seconds.
+///
+/// Accepts an integer optionally followed by a single-character unit suffix
+/// (case-insensitive): @c s (seconds), @c m (minutes), @c h (hours),
+/// @c d (days), or @c w (weeks).  A bare integer with no suffix is interpreted
+/// as hours for backward compatibility (issue #607).  Whitespace around the
+/// value and between the number and its suffix is tolerated.
+long parse_leeway_seconds(const string& raw) {
+  string s = raw;
+  boost::algorithm::trim(s);
+  if (s.empty())
+    throw_(option_error, _f("Missing argument for --price-exp"));
+
+  long multiplier = 3600L; // default: hours
+  char suffix = s[s.size() - 1];
+  if (!std::isdigit(static_cast<unsigned char>(suffix))) {
+    switch (std::tolower(static_cast<unsigned char>(suffix))) {
+    case 's': multiplier = 1L; break;
+    case 'm': multiplier = 60L; break;
+    case 'h': multiplier = 3600L; break;
+    case 'd': multiplier = 86400L; break;
+    case 'w': multiplier = 604800L; break;
+    default:
+      throw_(option_error,
+             _f("Invalid unit '%1%' for --price-exp; expected s, m, h, d, or w") % suffix);
+    }
+    s.erase(s.size() - 1);
+    boost::algorithm::trim_right(s);
+  }
+
+  long value;
+  try {
+    value = lexical_cast<long>(s);
+  } catch (const bad_lexical_cast&) {
+    throw_(option_error, _f("Invalid value for --price-exp: %1%") % raw);
+  }
+
+  if (value < 0)
+    throw_(option_error, _f("--price-exp value must be non-negative: %1%") % raw);
+
+  if (value > std::numeric_limits<long>::max() / multiplier)
+    throw_(option_error, _f("--price-exp value too large: %1%") % raw);
+
+  return value * multiplier;
+}
+
+} // anonymous namespace
+
 /*--- Option Normalization ---*/
 
 void report_t::normalize_options(const string& verb) {
@@ -139,7 +189,7 @@ void report_t::normalize_options(const string& verb) {
 
   if (session.HANDLED(price_exp_))
     commodity_pool_t::current_pool->quote_leeway =
-        lexical_cast<long>(session.HANDLER(price_exp_).value) * 3600L;
+        parse_leeway_seconds(session.HANDLER(price_exp_).value);
 
   if (session.HANDLED(price_db_))
     commodity_pool_t::current_pool->price_db = session.HANDLER(price_db_).str();
