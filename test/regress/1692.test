@@ -1,0 +1,41 @@
+; Regression test for issue #1692: Output breaks accounting equation
+; https://github.com/ledger/ledger/issues/1692
+;
+; Inferred balancing amounts whose magnitude was less than the
+; commodity's default display precision (0 digits for a newly
+; encountered commodity like Y below) would compare equal to zero via
+; amount_t::is_zero(), even though the value was non-zero at the
+; recovered cost precision.  Balance and register output then silently
+; omitted the balancing posting, violating double-entry accounting.
+;
+; The fix flags the inferred amount with BIGINT_COST_PREC via
+; set_cost_precision() and teaches amount_t::is_zero() to respect the
+; widened precision implied by the flag.  BIGINT_COST_PREC must not
+; propagate through addition/subtraction, or running-total residuals
+; would inherit it (see issue #717 rounding adjustments).
+
+2018-01-01 * Foo
+    Assets:A                    2 X @ 0.2 Y
+    Assets:B
+
+test bal
+                 2 X
+               Y-0.4  Assets
+                 2 X    A
+               Y-0.4    B
+--------------------
+                 2 X
+               Y-0.4
+end test
+
+test reg
+18-Jan-01 Foo                   Assets:A                        2 X          2 X
+                                Assets:B                      Y-0.4          2 X
+                                                                           Y-0.4
+end test
+
+test print
+2018/01/01 * Foo
+    Assets:A                                     2 X @ Y0.2
+    Assets:B
+end test
