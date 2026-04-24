@@ -415,7 +415,9 @@ optional<date_t> string_to_relative_date(const std::string& str) {
  * @brief Parse a datetime string using the two built-in datetime formats.
  *
  * Tries "YYYY/MM/DD HH:MM:SS" first, then "MM/DD/YYYY HH:MM:SS"
- * (the timeclock format).  Separators are normalized before parsing.
+ * (the timeclock format).  Separators are normalized before parsing: `.`
+ * and `-` become `/`, and `@` between date and time becomes a space so that
+ * forms like "2018/12/16@08:12:33" (which avoid shell quoting) are accepted.
  */
 datetime_t parse_datetime(const char* str) {
   if (std::strlen(str) > 127) {
@@ -425,9 +427,12 @@ datetime_t parse_datetime(const char* str) {
   char buf[128];
   std::strcpy(buf, str);
 
-  for (char* p = buf; *p; p++)
+  for (char* p = buf; *p; p++) {
     if (*p == '.' || *p == '-')
       *p = '/';
+    else if (*p == '@')
+      *p = ' ';
+  }
 
   datetime_t when = input_datetime_io->parse(buf);
   if (when.is_not_a_date_time()) {
@@ -437,6 +442,27 @@ datetime_t parse_datetime(const char* str) {
     }
   }
   return when;
+}
+
+/**
+ * @brief Attempt to parse a datetime string, returning none on failure.
+ *
+ * Mirrors parse_datetime() but never throws: a string that cannot be parsed
+ * as a datetime simply yields an empty optional.  This is the entry point
+ * used by options (e.g. --begin, --end, --now) that accept either a plain
+ * date or a full datetime, allowing callers to branch on the richer form.
+ */
+optional<datetime_t> try_parse_datetime(const std::string& str) {
+  if (str.size() > 127)
+    return none;
+  try {
+    datetime_t when = parse_datetime(str.c_str());
+    if (when.is_not_a_date_time())
+      return none;
+    return when;
+  } catch (const date_error&) { // NOLINT(bugprone-empty-catch)
+    return none;
+  }
 }
 
 /// @brief Parse a date string using the registered format cascade.
