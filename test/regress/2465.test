@@ -52,7 +52,8 @@ end test
 
 ; After all three periods: fully depreciated, zero book value for instruments.
 test bal --effective --end 2025/12/01
-                -150  Assets:CA
+                -150  Assets
+                -150    CA
                  150  Expenses:Instruments
 --------------------
                    0

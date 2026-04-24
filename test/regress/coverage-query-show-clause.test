@@ -9,5 +9,6 @@
     Assets:Checking
 
 test bal show Food -> 0
-              $50.00  Expenses:Food
+              $80.00  Expenses
+              $50.00    Food
 end test

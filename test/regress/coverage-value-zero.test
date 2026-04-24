@@ -20,7 +20,8 @@ test bal -> 0
              $100.00    A
             $-100.00    B
              $-50.00    Checking
-              $50.00  Expenses:Travel
+              $50.00  Expenses
+              $50.00    Travel
 --------------------
                    0
 end test

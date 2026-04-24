@@ -20,5 +20,8 @@ end test
 
 ; Verify final balances
 test bal Assets
-             $100.00  Assets:Cash
+             $100.00  Assets
+             $100.00    Cash
+--------------------
+             $100.00
 end test

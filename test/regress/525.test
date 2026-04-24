@@ -15,7 +15,8 @@
     [Assets:Checking]              = $0.00
 
 test bal
-             $-18.00  Assets:Budget:Expenses:Food:Groceries
+             $-18.00  Assets
+             $-18.00    Budget:Expenses:Food:Groceries
               $18.00  Expenses:Food:Groceries
 --------------------
                    0

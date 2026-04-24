@@ -31,7 +31,8 @@ test bal --depth 2
               $40.00  Expenses
               $10.00    Books
               $30.00    One
-             $-30.00  Income:One
+             $-30.00  Income
+             $-30.00    One
 --------------------
                    0
 end test
@@ -43,9 +44,10 @@ test bal --depth 3
               $30.00    One
               $10.00      Books
               $20.00      Two
-             $-30.00  Income:One
-             $-10.00    Books
-             $-20.00    Two
+             $-30.00  Income
+             $-30.00    One
+             $-10.00      Books
+             $-20.00      Two
 --------------------
                    0
 end test
@@ -59,11 +61,12 @@ test bal --depth 4
               $20.00      Two
               $10.00        Books
               $10.00        Three
-             $-30.00  Income:One
-             $-10.00    Books
-             $-20.00    Two
+             $-30.00  Income
+             $-30.00    One
              $-10.00      Books
-             $-10.00      Three
+             $-20.00      Two
+             $-10.00        Books
+             $-10.00        Three
 --------------------
                    0
 end test
@@ -77,11 +80,12 @@ test bal --depth 5
               $20.00      Two
               $10.00        Books
               $10.00        Three:Books
-             $-30.00  Income:One
-             $-10.00    Books
-             $-20.00    Two
+             $-30.00  Income
+             $-30.00    One
              $-10.00      Books
-             $-10.00      Three:Books
+             $-20.00      Two
+             $-10.00        Books
+             $-10.00        Three:Books
 --------------------
                    0
 end test

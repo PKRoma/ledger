@@ -64,10 +64,16 @@ test reg --gain stocks
 end test
 
 test bal --change
-              4500 P  Assets:Brokerage:Stocks
+              4500 P  Assets:Brokerage
+              4500 P    Stocks
+--------------------
+              4500 P
 end test
 
 test bal -G
-              4500 P  Assets:Brokerage:Stocks
+              4500 P  Assets:Brokerage
+              4500 P    Stocks
+--------------------
+              4500 P
 end test
 

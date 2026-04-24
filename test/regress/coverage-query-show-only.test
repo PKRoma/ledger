@@ -14,7 +14,8 @@
     Assets:Checking
 
 test bal Expenses show Food
-              $50.00  Expenses:Food
+             $130.00  Expenses
+              $50.00    Food
 end test
 
 test reg Expenses only Food

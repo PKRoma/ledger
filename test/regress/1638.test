@@ -32,7 +32,8 @@ P 2011/01/08 USD 1.45 CAD
 
 ; bal should net to zero with fixated prices and Income:Currency
 test bal
-          135.00 CAD  Assets:Canadian_Cash
+          135.00 CAD  Assets
+          135.00 CAD    Canadian_Cash
          -200.00 CAD  Equity:Initial_Capital
            20.00 CAD
               40 USD  Expenses:Food
@@ -44,7 +45,8 @@ end test
 
 ; --basis should also net to zero
 test bal --basis
-          135.00 CAD  Assets:Canadian_Cash
+          135.00 CAD  Assets
+          135.00 CAD    Canadian_Cash
          -200.00 CAD  Equity:Initial_Capital
            72.00 CAD  Expenses:Food
            -7.00 CAD  Income:Currency
@@ -54,7 +56,8 @@ end test
 
 ; -X CAD should also net to zero
 test bal -X CAD
-          135.00 CAD  Assets:Canadian_Cash
+          135.00 CAD  Assets
+          135.00 CAD    Canadian_Cash
          -200.00 CAD  Equity:Initial_Capital
            72.00 CAD  Expenses:Food
            -7.00 CAD  Income:Currency

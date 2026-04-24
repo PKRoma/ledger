@@ -18,7 +18,8 @@
     todo:adjust
 
 test bal
-                  $1  Assets:b
+                  $1  Assets
+                  $1    b
                  $-1  todo:adjust
 --------------------
                    0

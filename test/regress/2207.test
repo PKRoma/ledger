@@ -10,5 +10,8 @@ commodity $
     Assets:Checking
 
 test bal
-               $0.05  Assets:Checking
+               $0.05  Assets
+               $0.05    Checking
+--------------------
+               $0.05
 end test

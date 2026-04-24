@@ -8,5 +8,8 @@
 P 2008/06/01 AAPL $30.00
 
 test bal --gain
-             $100.00  Assets:Brokerage
+             $100.00  Assets
+             $100.00    Brokerage
+--------------------
+             $100.00
 end test

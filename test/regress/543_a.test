@@ -14,9 +14,10 @@
     Assets:Checking                             = $100.00
 
 test bal Assets
-             $100.00  Assets:Budget:Food
-              $20.00    Groceries
-              $80.00    Restaurants
+             $100.00  Assets
+             $100.00    Budget:Food
+              $20.00      Groceries
+              $80.00      Restaurants
 --------------------
              $100.00
 end test

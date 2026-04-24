@@ -28,5 +28,8 @@ P 2022/03/31 XYZ $5
     Assets:Checking      $-400
 
 test --gain --gain-since "2022/01/01" --now "2022/03/31" bal
-                $300  Assets:Investments
+                $300  Assets
+                $300    Investments
+--------------------
+                $300
 end test

@@ -494,8 +494,9 @@ $ ledger -f drewr3.dat balance
 Ledger will generate:
 
 @smallexample @c output:1071890
-          $ 1,396.00  Assets:Checking
-             $ 30.00    Business
+          $ 1,396.00  Assets
+          $ 1,396.00    Checking
+             $ 30.00      Business
          $ -6,200.00  Equity:Opening Balances
           $ 6,654.00  Expenses
           $ 5,500.00    Auto
@@ -525,8 +526,9 @@ $ ledger -f drewr3.dat balance Assets Liabilities
 @end smallexample
 
 @smallexample @c output:5BF4D8E
-          $ 1,396.00  Assets:Checking
-             $ 30.00    Business
+          $ 1,396.00  Assets
+          $ 1,396.00    Checking
+             $ 30.00      Business
             $ -63.60  Liabilities
             $ -20.00    MasterCard
             $ 200.00    Mortgage:Principal
@@ -1015,7 +1017,8 @@ $ ledger balance --no-total
 @end smallexample
 
 @smallexample @c output:990E0D1
-             $100.00  Assets:Checking
+             $100.00  Assets
+             $100.00    Checking
                    0  Company XYZ
             $-100.00    Assets:Checking
              $100.00    Expenses:Computer:Software
@@ -4898,8 +4901,9 @@ $ ledger balance -f drewr3.dat
 which will print the balances of every account in your journal.
 
 @smallexample @c output:1D00D56
-          $ 1,396.00  Assets:Checking
-             $ 30.00    Business
+          $ 1,396.00  Assets
+          $ 1,396.00    Checking
+             $ 30.00      Business
          $ -6,200.00  Equity:Opening Balances
           $ 6,654.00  Expenses
           $ 5,500.00    Auto
@@ -6955,8 +6959,9 @@ $ ledger -f drewr3.dat bal --no-total --master-account HUMBUG
 
 @smallexample @c output:A76BB56
                    0  HUMBUG
-          $ 1,396.00    Assets:Checking
-             $ 30.00      Business
+          $ 1,396.00    Assets
+          $ 1,396.00      Checking
+             $ 30.00        Business
          $ -6,200.00    Equity:Opening Balances
           $ 6,654.00    Expenses
           $ 5,500.00      Auto

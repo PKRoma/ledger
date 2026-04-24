@@ -10,5 +10,8 @@ P 2024/03/01 AAPL $155.00
     Assets:Checking
 
 test --gain --now "2024/03/15" bal -> 0
-              $50.00  Assets:Brokerage
+              $50.00  Assets
+              $50.00    Brokerage
+--------------------
+              $50.00
 end test

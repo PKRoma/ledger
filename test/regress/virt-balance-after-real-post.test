@@ -14,7 +14,11 @@
     [Assets:Checking]                           $20 = $0.00
 
 test bal Assets
-              $80.00  Assets:Budget:Food:Restaurants
+              $80.00  Assets
+              $80.00    Budget:Food
+              $80.00      Restaurants
+--------------------
+              $80.00
 end test
 
 test bal Assets -R

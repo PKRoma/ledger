@@ -15,7 +15,8 @@
     Assets:Cash                      -10 WIDGET
 
 test bal
-          -10 WIDGET  Assets:Cash
+          -10 WIDGET  Assets
+          -10 WIDGET    Cash
            10 WIDGET  Expenses:Products
 --------------------
                    0
