@@ -9402,13 +9402,101 @@ $ ledger -b "this month" register checking
 @end smallexample
 
 @menu
+* Value Types::
 * Variables::
 * Functions::
 * Operators::
 * Complex expressions::
 @end menu
 
-@node Variables, Functions, Value Expressions, Value Expressions
+@node Value Types, Variables, Value Expressions, Value Expressions
+@section Value Types
+
+Every value expression evaluates to a value of one of the types listed
+below.  The expression engine chooses the most specific representation
+that fits the result and promotes it only as needed.  Type promotion
+follows the hierarchy
+
+@smallexample
+VOID < BOOLEAN < DATETIME < DATE < INTEGER < AMOUNT < BALANCE
+     < STRING < MASK < SEQUENCE
+@end smallexample
+
+so adding a commoditized amount to an integer running total promotes
+the total to @code{AMOUNT}, and adding a second commodity promotes it
+further to @code{BALANCE}.  In most day-to-day reports the only types
+you will see are @code{AMOUNT}, @code{BALANCE}, @code{STRING},
+@code{DATE}, and @code{BOOLEAN}.
+
+@table @code
+@item VOID
+The null value, produced by variables that have no meaningful
+contents in the current context (for example, @code{aux_date} on a
+posting with no auxiliary date).  @code{VOID} is falsy in boolean
+tests, which makes it safe to write guards like
+@samp{aux_date and aux_date >= [2020/10/01]}.
+
+@item BOOLEAN
+A true/false value.  Comparison operators (@code{==}, @code{<},
+@code{=~}, @dots{}) return booleans, and booleans are what predicates
+like @option{--limit} and @option{--display} consume.  In arithmetic
+contexts, @code{true} behaves as 1 and @code{false} as 0.
+
+@item DATETIME
+A date with time-of-day precision, such as the value of
+@code{now}/@code{m} or the timestamp produced by a timeclock
+check-in.  Compares naturally with @code{DATE} values.
+
+@item DATE
+A calendar date with no time-of-day component.  @code{date}/@code{d}
+and @code{today} return dates.  A date written inside brackets --
+@code{[2020/10/01]} or @code{[last month]} -- is parsed as a date
+literal (@pxref{Period Expressions}).
+
+@item INTEGER
+A signed integer, produced by numeric literals like @code{5} and by
+counters such as @code{n} (posting index) and @code{N} (count of
+postings affecting an account).
+
+@item AMOUNT
+A single commoditized (or commodity-less) numeric quantity, such as
+@samp{$10.00} or @samp{3}.  Most arithmetic on the @code{amount}
+variable stays in this type.
+
+@item BALANCE
+A collection of amounts in different commodities.  An account's
+@code{total}/@code{O} is a balance once postings in more than one
+commodity have been seen.  Balances with a single commodity convert
+transparently to @code{AMOUNT} where an amount is expected.
+
+@item STRING
+A character string, produced by @code{account}, @code{payee},
+@code{commodity}, @code{note}, string literals, and the text captured
+by @code{==~}.  Non-empty strings are truthy; the empty string is
+falsy.  Regex operators (@code{=~}, @code{!~}, @code{==~}) require a
+string on the left and a @code{MASK} on the right.
+
+@item MASK
+A compiled regular expression, written between forward slashes such
+as @code{/Assets:/}.  Masks appear on the right-hand side of
+@code{=~}/@code{!~}/@code{==~} and as arguments to functions like
+@code{has_tag} and @code{tag}.
+
+@item SEQUENCE
+An ordered list of values.  Sequences are produced by the
+capture-group form of @code{==~} (@pxref{Complex expressions}) and by
+a few helper functions; individual elements are pulled out with
+@code{get_at(seq, index)}.  Non-empty sequences are truthy.
+@end table
+
+Values promote implicitly when combined -- @samp{1 + $2.00} produces
+@samp{$3.00} -- but conversions between unrelated types require an
+explicit call: @code{to_int}, @code{to_string}, @code{to_amount},
+@code{to_balance}, @code{to_date}, @code{to_datetime}, and
+@code{to_sequence} are all documented in the @ref{Miscellaneous}
+section.
+
+@node Variables, Functions, Value Types, Value Expressions
 @section Variables
 @findex --amount @var{EXPR}
 @findex --total @var{VEXPR}
