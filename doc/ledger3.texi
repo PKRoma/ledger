@@ -2243,6 +2243,20 @@ The syntax is:
 P DATE SYMBOL PRICE
 @end smallexample
 
+@code{PRICE} may also be a parenthesized expression.  If the
+expression evaluates to a single-commodity amount, that amount is
+recorded as the commodity's price on @code{DATE}.  If the expression
+evaluates to a multi-commodity balance (a ``basket''), the basket is
+attached to @code{SYMBOL} as its valuation expression, so that later
+@option{-V}/@option{-X} reports reprice the basket into whichever
+target commodity is requested (@pxref{Complete control over commodity
+pricing}).  For example, a currency basket consisting of 0.45 euros
+and 0.55 U.S. dollars can be expressed as:
+
+@smallexample
+P 2015-01-01 bicur (EUR 0.45 + $0.55)
+@end smallexample
+
 @item =
 @findex =
 @cindex automated transaction
