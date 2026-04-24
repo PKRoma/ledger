@@ -1,0 +1,54 @@
+; Regression test for issue #528: push/pop REPL commands
+; https://github.com/ledger/ledger/issues/528
+;
+; The `push` pre-command should preserve both options (e.g. -p) and
+; positional query arguments (e.g. "Groceries") across subsequent
+; commands until the matching `pop`.
+;
+; Before the fix, positional query args passed to `push` were silently
+; dropped: the push_command handler ignored its argument list, so only
+; options preserved via the report_t copy constructor survived.  After
+; the fix, push_command forwards its positional arguments to
+; parse_query_args() on the preserved report so that query terms behave
+; the same as --period and other --option flags.
+
+2018-01-01 Walmart
+    Expenses:Groceries                                   50.00 USD
+    Assets:Bank:Checking
+
+2018-02-01 Walmart
+    Expenses:Groceries                                   50.00 USD
+    Assets:Bank:Checking
+
+2018-03-01 Fuel Station
+    Expenses:Fuel                                        30.00 USD
+    Assets:Bank:Checking
+
+test --now "2018-02-15" --script test/regress/528.dat
+         -130.00 USD  Assets:Bank:Checking
+          130.00 USD  Expenses
+           30.00 USD    Fuel
+          100.00 USD    Groceries
+--------------------
+                   0
+          100.00 USD  Expenses:Groceries
+          100.00 USD  Expenses:Groceries
+         -130.00 USD  Assets:Bank:Checking
+          130.00 USD  Expenses
+           30.00 USD    Fuel
+          100.00 USD    Groceries
+--------------------
+                   0
+          -50.00 USD  Assets:Bank:Checking
+           50.00 USD  Expenses:Groceries
+--------------------
+                   0
+           30.00 USD  Expenses:Fuel
+           30.00 USD  Expenses:Fuel
+         -130.00 USD  Assets:Bank:Checking
+          130.00 USD  Expenses
+           30.00 USD    Fuel
+          100.00 USD    Groceries
+--------------------
+                   0
+end test

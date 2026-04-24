@@ -1,0 +1,16 @@
+--no-pager --columns=80 b
+--no-pager --columns=80 b Groceries
+--no-pager --columns=80 push Groceries
+--no-pager --columns=80 b
+--no-pager --columns=80 pop
+--no-pager --columns=80 b
+--no-pager --columns=80 push -p "2018/01"
+--no-pager --columns=80 b
+--no-pager --columns=80 pop
+--no-pager --columns=80 push Fuel
+--no-pager --columns=80 push -p "2018/03"
+--no-pager --columns=80 b
+--no-pager --columns=80 pop
+--no-pager --columns=80 b
+--no-pager --columns=80 pop
+--no-pager --columns=80 b
