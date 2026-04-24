@@ -1,0 +1,51 @@
+; Regression test for issue #1806: Lack of granularity in market pricing
+; https://github.com/ledger/ledger/issues/1806
+;
+; When a posting has both a lot-value annotation and an explicit @/@@
+; transaction cost, --price (-I) should report the realized transaction
+; price, not the lot basis.  Previously --price and --basis produced
+; identical output because both drew from the lot annotation, making
+; the transaction-level gain/loss invisible in the priced account.
+;
+; The priced view of the options account should make the $93.43 realized
+; gain visible by valuing the sell at $1,295.00 (the @ price) and the
+; close at $1,200.00 (the @ price) rather than both at the lot basis
+; of $1,294.20, which otherwise sums to zero.
+
+2019/01/01 SOLD -1 TSLA 100 16 AUG 19 220 PUT @12.95
+    (Expenses:Fees)                            $0.05
+    (Expenses:Commission)                      $0.75
+    Assets:Brokerage:Options         -1 "TSLA 100 16 AUG 19 220 PUT" {{$1,294.20}} @ $1,295.00
+    Assets:Brokerage:Cash                  $1,294.20
+
+2019/01/01 BOT +1 TSLA 100 16 AUG 19 220 PUT @12.00
+    (Expenses:Fees)                            $0.02
+    (Expenses:Commission)                      $0.75
+    Income:Capital:Short                     $-93.43
+    Assets:Brokerage:Options         1 "TSLA 100 16 AUG 19 220 PUT" {{$1,294.20}} @ $1,200.00
+    Assets:Brokerage:Cash                 $-1,200.77
+
+; --price surfaces the realized transaction prices so the $95.00 gross
+; trading gain is visible in the options account.
+test reg options --price
+19-Jan-01 SOLD -1 TSLA 100 16.. Asse:Brokerage:Options   $-1,295.00   $-1,295.00
+19-Jan-01 BOT +1 TSLA 100 16 .. Asse:Brokerage:Options    $1,200.00      $-95.00
+end test
+
+; The gross trading gain (sold $1295 / bought $1200 = $95) collapses to
+; $-95.00 as the remaining valuation in the options account.
+test bal options --price
+             $-95.00  Assets:Brokerage:Options
+end test
+
+; --basis still reports the lot basis, so the two sides cancel to zero.
+test reg options --basis
+19-Jan-01 SOLD -1 TSLA 100 16.. Asse:Brokerage:Options   $-1,294.20   $-1,294.20
+19-Jan-01 BOT +1 TSLA 100 16 .. Asse:Brokerage:Options    $1,294.20            0
+end test
+
+; Without any valuation option, postings stay in the original commodity.
+test reg options
+19-Jan-01 SOLD -1 TSLA 100 16.. Asse:Brokerage:Options -1 TSLA 100 16 AUG 19 220 PUT -1 TSLA 100 16 AUG 19 220 PUT
+19-Jan-01 BOT +1 TSLA 100 16 .. Asse:Brokerage:Options 1 TSLA 100 16 AUG 19 220 PUT            0
+end test
