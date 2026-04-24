@@ -103,11 +103,12 @@ jobs:
   build-windows:
     # Windows build via MSYS2/UCRT64. Separate job (not part of the build
     # matrix) because Windows needs a different shell, toolchain bootstrap,
-    # and dependency install path than Ubuntu/macOS. Marked
-    # continue-on-error while the Windows toolchain stabilises so that
-    # unrelated PRs aren't blocked by Windows-specific regressions.
+    # and dependency install path than Ubuntu/macOS. While the Windows
+    # toolchain stabilises, Configure and Build are marked
+    # continue-on-error so unrelated PRs are not blocked by Windows-
+    # specific regressions. Once the job runs green on a few merges,
+    # those flags can be removed.
     runs-on: windows-latest
-    continue-on-error: true
     defaults:
       run:
         shell: msys2 {0}
@@ -132,6 +133,7 @@ jobs:
             mingw-w64-ucrt-x86_64-icu
 
       - name: Configure CMake
+        continue-on-error: true
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
@@ -139,6 +141,7 @@ jobs:
             -DUSE_GPGME=OFF
 
       - name: Build
+        continue-on-error: true
         run: cmake --build build
 
   coverage:
