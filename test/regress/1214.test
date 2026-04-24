@@ -1,0 +1,27 @@
+; Regression test for issue #1214: `!include` should accept paths whose
+; directory components contain glob wildcards (e.g. `a/*/*.ledger`).
+;
+; Prior to the fix, the include directive only globbed the last path
+; component; any wildcard in a parent directory caused the include to
+; fail with "File to include was not found".
+
+!include 1214-dir/a/*/*.dat
+
+test bal
+             $-30.00  Assets:Cash
+              $30.00  Expenses
+              $10.00    Food
+              $20.00    Rent
+--------------------
+                   0
+end test
+
+test reg @"Payee B" --date-format "%Y/%m/%d"
+2024/01/15 Payee B              Expenses:Food                $10.00       $10.00
+                                Assets:Cash                 $-10.00            0
+end test
+
+test reg @"Payee C" --date-format "%Y/%m/%d"
+2024/01/16 Payee C              Expenses:Rent                $20.00       $20.00
+                                Assets:Cash                 $-20.00            0
+end test
