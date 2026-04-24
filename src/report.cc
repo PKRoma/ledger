@@ -104,11 +104,21 @@ long parse_leeway_seconds(const string& raw) {
   char suffix = s[s.size() - 1];
   if (!std::isdigit(static_cast<unsigned char>(suffix))) {
     switch (std::tolower(static_cast<unsigned char>(suffix))) {
-    case 's': multiplier = 1L; break;
-    case 'm': multiplier = 60L; break;
-    case 'h': multiplier = 3600L; break;
-    case 'd': multiplier = 86400L; break;
-    case 'w': multiplier = 604800L; break;
+    case 's':
+      multiplier = 1L;
+      break;
+    case 'm':
+      multiplier = 60L;
+      break;
+    case 'h':
+      multiplier = 3600L;
+      break;
+    case 'd':
+      multiplier = 86400L;
+      break;
+    case 'w':
+      multiplier = 604800L;
+      break;
     default:
       throw_(option_error,
              _f("Invalid unit '%1%' for --price-exp; expected s, m, h, d, or w") % suffix);
