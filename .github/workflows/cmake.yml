@@ -100,6 +100,47 @@ jobs:
             echo "::warning::Sanitizer issues were detected. See above for details."
           fi
 
+  build-windows:
+    # Windows build via MSYS2/UCRT64. Separate job (not part of the build
+    # matrix) because Windows needs a different shell, toolchain bootstrap,
+    # and dependency install path than Ubuntu/macOS. Marked
+    # continue-on-error while the Windows toolchain stabilises so that
+    # unrelated PRs aren't blocked by Windows-specific regressions.
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v6
+        name: Check out repository code
+
+      - uses: msys2/setup-msys2@v2
+        name: Set up MSYS2 (UCRT64)
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-boost
+            mingw-w64-ucrt-x86_64-gmp
+            mingw-w64-ucrt-x86_64-mpfr
+            mingw-w64-ucrt-x86_64-icu
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+            -DUSE_PYTHON=OFF \
+            -DUSE_GPGME=OFF
+
+      - name: Build
+        run: cmake --build build
+
   coverage:
     runs-on: ubuntu-latest
     steps:
