@@ -250,6 +250,7 @@ std::pair<std::size_t, std::size_t> format_accounts::mark_accounts(account_t& ac
     bind_scope_t bound_scope(report, account);
     call_scope_t call_scope(bound_scope);
     if ((!flat && to_display > 1) || (!flat && to_display == 1 && !account.posts.empty()) ||
+        (!flat && to_display == 1 && visited > 1) ||
         ((flat || to_display != 1 || account.has_xflags(ACCOUNT_EXT_VISITED)) &&
          (report.HANDLED(empty) || report.display_value(report.fn_display_total(call_scope))) &&
          disp_pred(bound_scope))) {

@@ -1,0 +1,41 @@
+; Regression test for issue #560: Getting balances of parent and empty/zero accounts
+; https://github.com/ledger/ledger/issues/560
+;
+; When a parent account had multiple visited children but only one displayable
+; (non-zero) child, the balance report omitted the parent header, making it
+; look as if the zero-balance siblings had never been posted to. The fix in
+; src/output.cc treats a parent with multiple visited children as worth
+; displaying even when only one child has a non-zero balance, consistent with
+; the existing behavior when two or more children are displayable.
+
+2024/01/01 Opening Balance
+    Assets:Bank:Checking    $100.00
+    Equity:Opening          $-100.00
+
+2024/01/02 Transfer to Savings
+    Assets:Bank:Savings     $100.00
+    Assets:Bank:Checking    $-100.00
+
+; Parent Assets:Bank should appear because both Checking and Savings were
+; posted to, even though Checking zeroed out.
+test bal Assets:Bank
+             $100.00  Assets:Bank
+             $100.00    Savings
+--------------------
+             $100.00
+end test
+
+; With --empty, the parent header and zero-balance child are both shown.
+test bal Assets:Bank --empty
+             $100.00  Assets:Bank
+               $0.00    Checking
+             $100.00    Savings
+--------------------
+             $100.00
+end test
+
+; A parent with a single visited child and no other siblings still collapses
+; to a single leaf line (single-path collapse is the intended design).
+test bal Equity
+            $-100.00  Equity:Opening
+end test
