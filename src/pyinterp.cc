@@ -131,35 +131,50 @@ void python_interpreter_t::initialize() {
   try {
     DEBUG("python.interp", "Initializing Python");
 
-    // PyImport_AppendInittab docs: "This should be called before Py_Initialize()".
-    PyImport_AppendInittab((const char*)"ledger", PyInit_ledger);
+    // If Python is already running (for example, because ledger was loaded
+    // as a Python extension module via `import ledger` from an external
+    // interpreter), skip the inittab registration and Py_Initialize.
+    // Calling PyImport_AppendInittab after Py_Initialize is a fatal error
+    // in Python 3.12+, and re-running Py_Initialize on an embedding
+    // interpreter would clobber its state.  In that scenario the ledger
+    // module has already been loaded via PyInit_ledger, so every Boost
+    // converter is already registered and no further setup is required.
+    if (!Py_IsInitialized()) {
+      // PyImport_AppendInittab docs: "This should be called before Py_Initialize()".
+      PyImport_AppendInittab((const char*)"ledger", PyInit_ledger);
 
-    // Unbuffer stdio to avoid python output getting stuck in buffer when
-    // stdout is not a TTY. Normally buffers are flushed by Py_Finalize but
-    // Boost has a long-standing issue preventing proper shutdown of the
-    // interpreter with Py_Finalize when embedded.
+      // Unbuffer stdio to avoid python output getting stuck in buffer when
+      // stdout is not a TTY. Normally buffers are flushed by Py_Finalize but
+      // Boost has a long-standing issue preventing proper shutdown of the
+      // interpreter with Py_Finalize when embedded.
 #if PY_MINOR_VERSION < 12
-    Py_UnbufferedStdioFlag = 1;
-    Py_Initialize();
+      Py_UnbufferedStdioFlag = 1;
+      Py_Initialize();
 #else
-    PyStatus status;
-    PyConfig config;
-    PyConfig_InitPythonConfig(&config);
-    config.buffered_stdio = 0;
-    status = Py_InitializeFromConfig(&config);
-    if (PyStatus_Exception(status)) {
+      PyStatus status;
+      PyConfig config;
+      PyConfig_InitPythonConfig(&config);
+      config.buffered_stdio = 0;
+      status = Py_InitializeFromConfig(&config);
+      if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        Py_ExitStatusException(status);
+        return;
+      }
       PyConfig_Clear(&config);
-      Py_ExitStatusException(status);
-      return;
-    }
-    PyConfig_Clear(&config);
 #endif
+
+      we_started_python = true;
+    }
 
     assert(Py_IsInitialized());
 
     hack_system_paths();
 
     main_module = import_module("__main__");
+    // PyImport_ImportModule returns the cached module if "ledger" is
+    // already in sys.modules, so this does not re-run PyInit_ledger and
+    // will not cause duplicate converter registration.
     PyImport_ImportModule("ledger");
 
     is_initialized = true;

@@ -83,6 +83,20 @@ if(Python_EXECUTABLE)
       WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
     set_tests_properties(demo
       PROPERTIES ENVIRONMENT "TZ=${Ledger_TEST_TIMEZONE};PYTHONPATH=.")
+
+    # Regression test for GitHub issue #513: loading the ledger module from
+    # an external Python interpreter must not re-initialize Python, and
+    # reading a journal with a `python` directive must not emit any
+    # RuntimeWarnings (or, on Python 3.12+, abort with a fatal error from
+    # PyImport_AppendInittab).  This test must run via the external Python
+    # interpreter -- not the in-tree test harness, which executes python
+    # blocks under ledger's embedded interpreter where the bug does not
+    # manifest.
+    add_test(NAME RegressPyTest_513
+      COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/regress/513.py
+      WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+    set_tests_properties(RegressPyTest_513
+      PROPERTIES ENVIRONMENT "TZ=${Ledger_TEST_TIMEZONE};PYTHONPATH=.")
   endif()
 endif()
 
