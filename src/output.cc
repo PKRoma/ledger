@@ -71,8 +71,8 @@ namespace {
 /// then restores the newline.  If @p formatted has no trailing newline the
 /// append output is simply concatenated.  A null @p append_format_ptr (or
 /// an empty @p formatted) reverts to a plain write.
-inline void write_with_append(std::ostream& out, const string& formatted, format_t* append_format_ptr,
-                              scope_t& scope) {
+inline void write_with_append(std::ostream& out, const string& formatted,
+                              format_t* append_format_ptr, scope_t& scope) {
   if (!append_format_ptr || !*append_format_ptr || formatted.empty()) {
     out << formatted;
     return;
@@ -192,8 +192,7 @@ void format_posts::operator()(post_t& post) {
 
 format_accounts::format_accounts(report_t& _report, const string& format,
                                  const optional<string>& _prepend_format,
-                                 std::size_t _prepend_width,
-                                 const optional<string>& _append_format)
+                                 std::size_t _prepend_width, const optional<string>& _append_format)
     : report(_report), prepend_width(_prepend_width), disp_pred(), first_report_title(true) {
   const char* f = format.c_str();
 

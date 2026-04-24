@@ -2003,13 +2003,11 @@ expr_t::ptr_op_t report_t::lookup(const symbol_t::kind_t kind, const string& nam
 #define FORMATTED_COMMODITIES_REPORTER(format)                                                     \
   POSTS_REPORTER_(                                                                                 \
       &report_t::commodities_report,                                                               \
-      new format_posts(*this, report_format(HANDLER(format)),                                      \
-                       maybe_format(HANDLER(prepend_format_)),                                     \
-                       HANDLED(prepend_width_)                                                     \
-                           ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str())              \
-                           : 0,                                                                    \
-                       maybe_format(HANDLER(append_format_)))) ///< Commodity report using a named \
-                                                               ///< format option
+      new format_posts(                                                                            \
+          *this, report_format(HANDLER(format)), maybe_format(HANDLER(prepend_format_)),           \
+          HANDLED(prepend_width_) ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str()) : 0,  \
+          maybe_format(HANDLER(append_format_)))) ///< Commodity report using a named \
+                                                  ///< format option
 
 #define ACCOUNTS_REPORTER(formatter)                                                               \
   expr_t::op_t::wrap_functor(reporter<account_t, acct_handler_ptr, &report_t::accounts_report>(    \
