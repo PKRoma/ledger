@@ -1,0 +1,58 @@
+; Regression test for issue #1153: Pivot could use a truncate option
+; https://github.com/ledger/ledger/issues/1153
+;
+; --pivot prepends "Tag:Value" to the original account hierarchy, producing
+; names like "Member:John Doe:Income:Fees".  --pivot-only replaces the
+; original account entirely with "Tag:Value", giving a cleaner pivot view
+; (e.g. just "Member:John Doe").
+
+2024/01/01 Alpha Subscription
+    Income:Fees                              $-42.00
+        ; Member: John Doe
+    Assets:Bank
+
+2024/01/02 Beta Subscription
+    Income:Fees                              $-30.00
+        ; Member: Jane Roe
+    Assets:Bank
+
+2024/01/03 Alpha Renewal
+    Income:Fees                              $-42.00
+        ; Member: John Doe
+    Assets:Bank
+
+; --pivot retains the original account hierarchy as a suffix.
+test bal --pivot Member
+             $114.00  Assets:Bank
+            $-114.00  Member
+             $-30.00    Jane Roe:Income:Fees
+             $-84.00    John Doe:Income:Fees
+--------------------
+                   0
+end test
+
+; --pivot-only drops the original account entirely, so all Income:Fees
+; postings that share a Member tag collapse into the Member:<value> bucket.
+test bal --pivot-only Member
+             $114.00  Assets:Bank
+            $-114.00  Member
+             $-30.00    Jane Roe
+             $-84.00    John Doe
+--------------------
+                   0
+end test
+
+; Filtering by the pivoted name works with --pivot-only as well.
+test bal --pivot-only Member "Member:John Doe"
+             $-84.00  Member:John Doe
+end test
+
+; --pivot-only also works on a register report.
+test reg --pivot-only Member
+24-Jan-01 Alpha Subscription    Member:John Doe             $-42.00      $-42.00
+24-Jan-01 Alpha Subscription    Assets:Bank                  $42.00            0
+24-Jan-02 Beta Subscription     Member:Jane Roe             $-30.00      $-30.00
+24-Jan-02 Beta Subscription     Assets:Bank                  $30.00            0
+24-Jan-03 Alpha Renewal         Member:John Doe             $-42.00      $-42.00
+24-Jan-03 Alpha Renewal         Assets:Bank                  $42.00            0
+end test

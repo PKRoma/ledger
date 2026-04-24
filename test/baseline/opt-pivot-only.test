@@ -1,0 +1,101 @@
+
+2014-01-01 * Opening balance
+    Assets:Cash                               25.00 GBP
+    Equity:Opening balance                   -25.00 GBP
+
+2014-05-01 * Sell to customer AAA
+    ; Customer: AAA
+    ; Invoice: 101
+    Assets:Receivables                        10.00 GBP
+    Income:Sale                              -10.00 GBP
+
+2014-05-02 * Sell to customer BBB
+    ; Customer: BBB
+    ; Invoice: 102
+    Assets:Receivables                        11.00 GBP
+    Income:Sale                              -11.00 GBP
+
+2014-05-03 * Sell to customer AAA
+    ; Customer: AAA
+    ; Invoice: 103
+    Assets:Receivables                        12.00 GBP
+    Income:Sale                              -12.00 GBP
+
+2014-05-04 * Sell to customer CCC
+    ; Customer: CCC
+    ; Invoice: 104
+    Assets:Receivables                        15.00 GBP
+    Income:Sale                              -15.00 GBP
+
+2014-05-05 * Money received from customer AAA for invoice 101
+    ; Customer: AAA
+    ; Invoice: 101
+    Assets:Cash                               10.00 GBP
+    Assets:Receivables                       -10.00 GBP
+
+2014-05-05 * Sell to customer DDD
+    ; Customer: DDD
+    ; Invoice: 105
+    Assets:Receivables                        20.00 GBP
+    Income:Sale                              -20.00 GBP
+
+2014-05-07 * Money received from customer CCC for invoice 104
+    ; Customer: CCC
+    ; Invoice: 104
+    Assets:Cash                               15.00 GBP
+    Assets:Receivables                       -15.00 GBP
+
+2014-05-08 * Partial payment received from customer DDD for invoice 105
+    ; Customer: DDD
+    ; Invoice: 105
+    Assets:Cash                               15.00 GBP
+    Assets:Receivables                       -15.00 GBP
+
+test bal --pivot-only Invoice --flat --empty
+           25.00 GBP  Assets:Cash
+          -25.00 GBP  Equity:Opening balance
+            0.00 GBP  Invoice:101
+            0.00 GBP  Invoice:102
+            0.00 GBP  Invoice:103
+            0.00 GBP  Invoice:104
+            0.00 GBP  Invoice:105
+--------------------
+                   0
+end test
+
+test bal --pivot-only Invoice --empty -p "until 2014-05-05"
+           25.00 GBP  Assets:Cash
+          -25.00 GBP  Equity:Opening balance
+                   0  Invoice
+            0.00 GBP    101
+            0.00 GBP    102
+            0.00 GBP    103
+            0.00 GBP    104
+                   0    105
+--------------------
+                   0
+end test
+
+test bal --pivot-only Customer --empty
+           25.00 GBP  Assets:Cash
+                   0  Customer
+            0.00 GBP    AAA
+            0.00 GBP    BBB
+            0.00 GBP    CCC
+            0.00 GBP    DDD
+          -25.00 GBP  Equity:Opening balance
+--------------------
+                   0
+end test
+
+test bal --pivot-only Customer --empty -p "until 2014-05-05"
+           25.00 GBP  Assets:Cash
+                   0  Customer
+            0.00 GBP    AAA
+            0.00 GBP    BBB
+            0.00 GBP    CCC
+                   0    DDD
+          -25.00 GBP  Equity:Opening balance
+--------------------
+                   0
+end test
