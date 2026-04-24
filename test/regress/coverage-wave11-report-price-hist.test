@@ -14,7 +14,7 @@ P 2024/03/01 AAPL $160.00
 
 test reg -I Assets:Brokerage
 24-Jan-15 Buy Stocks            Assets:Brokerage           $1500.00     $1500.00
-24-Mar-15 Sell Stocks           Assets:Brokerage           $-750.00      $750.00
+24-Mar-15 Sell Stocks           Assets:Brokerage           $-800.00      $700.00
 end test
 
 test reg -H Assets:Brokerage
