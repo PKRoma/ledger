@@ -182,11 +182,20 @@ public:
 
   /// REPL pre-command: push a copy of the current report onto the stack
   /// at position 2 (below the active report whose output stream is open).
-  value_t push_command(call_scope_t&) {
+  /// Options set on the push command line (e.g. --period) were applied to
+  /// the active report during argument processing and are preserved via the
+  /// copy; positional query terms (e.g. account names) are applied here so
+  /// that they too persist until the matching pop.  Fixes #528.
+  value_t push_command(call_scope_t& args) {
     // Make a copy at position 2, because the topmost report object has an
     // open output stream at this point.  We want it to get popped off as
     // soon as this command terminate so that the stream is closed cleanly.
-    report_stack.insert(++report_stack.begin(), new report_t(report_stack.front()));
+    report_t* saved_report = new report_t(report_stack.front());
+    report_stack.insert(++report_stack.begin(), saved_report);
+
+    if (args.size() > 0)
+      saved_report->parse_query_args(args.value(), "#push");
+
     return true;
   }
 
