@@ -1,0 +1,44 @@
+; Regression test for issue #1645: `ledger equity` should honour `--invert`,
+; producing an inverting transaction that would zero out the source balances.
+
+D 1000.00 GBP
+
+2011-03-04 Buy shares
+    Assets:Broker           2 AAA @ 0.90 GBP
+    Assets:Bank
+
+2011-03-05 Buy shares
+    Assets:Broker           2 AAA @ 1.00 GBP
+    Assets:Bank
+
+test equity
+2011/03/05 Opening Balances
+    Assets:Bank                            -3.80 GBP
+    Assets:Broker                              4 AAA
+    Equity:Opening Balances                   -4 AAA
+    Equity:Opening Balances                 3.80 GBP
+end test
+
+test equity --invert
+2011/03/05 Opening Balances
+    Assets:Bank                             3.80 GBP
+    Assets:Broker                             -4 AAA
+    Equity:Opening Balances                    4 AAA
+    Equity:Opening Balances                -3.80 GBP
+end test
+
+test equity --invert assets:bank
+2011/03/05 Opening Balances
+    Assets:Bank                             3.80 GBP
+    Equity:Opening Balances
+end test
+
+test equity --invert --lots --date-format %Y/%m/%d
+2011/03/05 Opening Balances
+    Assets:Bank                             3.80 GBP
+    Assets:Broker                       -2 AAA {0.90 GBP} [2011/03/04]
+    Assets:Broker                       -2 AAA {1.00 GBP} [2011/03/05]
+    Equity:Opening Balances             2 AAA {0.90 GBP} [2011/03/04]
+    Equity:Opening Balances             2 AAA {1.00 GBP} [2011/03/05]
+    Equity:Opening Balances                -3.80 GBP
+end test
