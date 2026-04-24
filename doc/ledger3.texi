@@ -6596,6 +6596,13 @@ Show subtotals in the balance report as percentages.
 @item --pivot @var{TAG}
 Produce a pivot table of the @var{TAG} type specified.
 
+@item --pivot-only @var{TAG}
+Like @option{--pivot}, but replaces the original account hierarchy with the
+pivoted name instead of prepending to it.  Where @option{--pivot Member}
+produces accounts like @samp{Member:John Doe:Income:Fees},
+@option{--pivot-only Member} produces just @samp{Member:John Doe}, causing
+all postings sharing a tag value to collapse into a single account.
+
 @item --amount-data
 @itemx -j
 Show only the date and value columns to format the output for plots.
@@ -7839,6 +7846,25 @@ $ ledger bal Fuel --pivot "Car" --period "this year"
            $ 3533.95
 @end smallexample
 
+A companion option, @option{--pivot-only @var{TAG}}, replaces the original
+account hierarchy with the pivoted name instead of prepending to it.  The
+same command with @option{--pivot-only} collapses all fuel postings for a
+given car into a single bucket:
+
+@smallexample @c command:validate
+$ ledger bal Fuel --pivot-only "Car" --period "this year"
+@end smallexample
+@smallexample
+           $ 3491.26  Car
+           $ 1084.22    M3
+            $ 149.65    MG V11
+            $ 621.89    Prius
+           $ 1635.50    Sienna
+             $ 42.69  Expenses:Auto:Fuel
+--------------------
+           $ 3533.95
+@end smallexample
+
 @xref{Metadata values}.
 
 @item --plot-amount-format @var{FORMAT_STRING}
@@ -8305,6 +8331,12 @@ value expressions, see @ref{Value Expressions}.
 @item --pivot @var{TAG}
 Produce a pivot table around the @var{TAG} provided.  This requires
 meta data using valued tags.
+
+@item --pivot-only @var{TAG}
+Like @option{--pivot}, but replaces the original account hierarchy with
+the pivoted name (@samp{TAG:value}) instead of prepending to it.  Useful
+when you want the tag value to become the account itself rather than a
+prefix of the original account.
 
 @item --wide
 @itemx -w

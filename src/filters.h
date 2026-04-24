@@ -151,7 +151,8 @@
  *
  * @subsection cat_transformation Transformation
  * - **transfer_details** -- Rewrites a posting's date, account, or payee based
- *   on an expression.  Used by --date, --account, --payee, and --pivot.
+ *   on an expression.  Used by --date, --account, --payee, --pivot, and
+ *   --pivot-only.
  * - **anonymize_posts** -- Replaces all identifying information (payee, account
  *   names, commodity symbols) with anonymized data.  Used by --anon.
  * - **posts_as_equity** (extends subtotal_posts) -- Converts postings into
@@ -1146,10 +1147,11 @@ public:
 /**
  * @brief Rewrites a posting's date, account, or payee based on an expression.
  *
- * Used by --date, --account, --payee, and --pivot.  For each posting, the
- * expression is evaluated and the result replaces the specified element.
- * For SET_ACCOUNT, the expression result is prepended to the existing
- * account hierarchy.
+ * Used by --date, --account, --payee, --pivot, and --pivot-only.  For each
+ * posting, the expression is evaluated and the result replaces the specified
+ * element.  For SET_ACCOUNT, the expression result is prepended to the
+ * existing account hierarchy.  For SET_ACCOUNT_REPLACE, the expression result
+ * replaces the account entirely, dropping the original account hierarchy.
  */
 class transfer_details : public item_handler<post_t> {
   account_t* master;   ///< Journal master account for resolving account paths.
@@ -1162,9 +1164,10 @@ class transfer_details : public item_handler<post_t> {
 public:
   /// Which posting element to rewrite.
   enum element_t : uint8_t {
-    SET_DATE,    ///< Rewrite the posting date.
-    SET_ACCOUNT, ///< Rewrite the account (prepending expression result).
-    SET_PAYEE    ///< Rewrite the transaction payee.
+    SET_DATE,            ///< Rewrite the posting date.
+    SET_ACCOUNT,         ///< Rewrite the account (prepending expression result).
+    SET_ACCOUNT_REPLACE, ///< Rewrite the account (replacing it entirely).
+    SET_PAYEE            ///< Rewrite the transaction payee.
   } which_element;
 
   transfer_details(post_handler_ptr handler, element_t _which_element, account_t* _master,
