@@ -130,8 +130,7 @@ public:
   // has an independent (empty) posting history.
   account_t(const account_t& other)
       : supports_flags<>(other.flags()), scope_t(), parent(other.parent), name(other.name),
-        note(other.note), depth(other.depth), accounts(other.accounts),
-        metadata(other.metadata) {
+        note(other.note), depth(other.depth), accounts(other.accounts), metadata(other.metadata) {
     TRACE_CTOR(account_t, "copy");
   }
   account_t& operator=(const account_t&) = default;
@@ -278,8 +277,7 @@ public:
    * @param value              Optional value to associate with the tag.
    * @param overwrite_existing If false, an existing tag is left untouched.
    */
-  item_t::string_map::iterator set_tag(const string& tag,
-                                       const std::optional<value_t>& value = {},
+  item_t::string_map::iterator set_tag(const string& tag, const std::optional<value_t>& value = {},
                                        bool overwrite_existing = true);
 
   /**
