@@ -3169,6 +3169,60 @@ You can gang up multiple tags by sharing colons:
       ; :TAG1:TAG2:TAG3:
 @end smallexample
 
+Once postings carry tags, reports can be filtered to those that have a
+particular tag.  The query keyword @code{tag} (or its shorthand
+@samp{%}) selects items by tag name.  Given the journal:
+
+@smallexample @c input:28215E8
+2012-03-10 KFC
+    ; :Restaurant:Lunch:
+    Expenses:Food                $20.00
+    Assets:Cash
+
+2012-03-12 Whole Foods
+    ; :Grocery:
+    Expenses:Groceries           $65.00
+    Assets:Cash
+
+2012-03-15 Starbucks
+    ; :Restaurant:Coffee:
+    Expenses:Food                 $5.00
+    Assets:Cash
+@end smallexample
+
+@noindent
+the following report lists only the postings whose transaction is tagged
+@samp{Restaurant}:
+
+@smallexample @c command:28215E8
+$ ledger -f tagged.dat reg %Restaurant
+@end smallexample
+
+@smallexample @c output:28215E8
+12-Mar-10 KFC                   Expenses:Food                $20.00       $20.00
+                                Assets:Cash                 $-20.00            0
+12-Mar-15 Starbucks             Expenses:Food                 $5.00        $5.00
+                                Assets:Cash                  $-5.00            0
+@end smallexample
+
+@noindent
+and the same query summed by account with @command{balance}:
+
+@smallexample @c command:7505A07,with_input:28215E8
+$ ledger -f tagged.dat bal %Restaurant
+@end smallexample
+
+@smallexample @c output:7505A07
+             $-25.00  Assets:Cash
+              $25.00  Expenses:Food
+--------------------
+                   0
+@end smallexample
+
+Tag queries combine with the usual @code{and}, @code{or} and @code{not}
+operators (@pxref{Complex expressions}), so @samp{%Restaurant and not
+%Coffee} would exclude the Starbucks transaction above.
+
 @node Metadata values, Typed metadata, Metadata tags, Metadata
 @subsection Metadata values
 
@@ -3182,6 +3236,47 @@ the colon, and cannot appear in the Key:
     Assets:Cash
       ; MyTag: This is just a bogus value for MyTag
 @end smallexample
+
+The shorthand @samp{%@var{tag}=@var{value}} narrows a tag query to a
+specific value, which is useful when several transactions share the same
+tag but differ in what it points to.  For example:
+
+@smallexample @c input:D202C36
+2012-03-10 KFC
+    ; Project: Lunch with Bob
+    Expenses:Food                $20.00
+    Assets:Cash
+
+2012-03-12 Cinema
+    ; Project: Birthday
+    Expenses:Entertainment       $15.00
+    Assets:Cash
+
+2012-03-15 Whole Foods
+    ; Project: Birthday
+    Expenses:Groceries           $35.00
+    Assets:Cash
+@end smallexample
+
+@noindent
+selecting only postings whose @samp{Project} value is @samp{Birthday}:
+
+@smallexample @c command:D202C36
+$ ledger -f projects.dat bal %Project=Birthday
+@end smallexample
+
+@smallexample @c output:D202C36
+             $-50.00  Assets:Cash
+              $50.00  Expenses
+              $15.00    Entertainment
+              $35.00    Groceries
+--------------------
+                   0
+@end smallexample
+
+To produce subtotals broken down by tag value, combine a tag query with
+@option{--group-by}, for example @samp{ledger bal %Project --group-by
+'tag("Project")'}.
 
 @node Typed metadata, Payee metadata, Metadata values, Metadata
 @subsection Typed metadata
