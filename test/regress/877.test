@@ -1,0 +1,88 @@
+; Regression test for issue #877.
+;
+; Allow nested `account` declarations under an enclosing `account`
+; directive, so the full colon-separated path need not be repeated
+; for every descendant account.
+;
+;   account Income
+;       account Salary            ; creates "Income:Salary"
+;       account Apps              ; creates "Income:Apps"
+;           account Android       ; creates "Income:Apps:Android"
+;           account iPhone        ; creates "Income:Apps:iPhone"
+;       account Rent              ; creates "Income:Rent"
+;
+; Sub-directives (note, alias, default, etc.) still apply to the
+; enclosing account as long as they sit at the same indentation as
+; the nested `account` keyword; deeper indentation attaches them to
+; the nested account instead.
+
+commodity $
+
+account Income
+    note Top-level income category
+    account Salary
+        note Regular monthly salary
+        alias salary
+    account Apps
+        note Mobile app revenue
+        account Android
+            alias android
+        account iPhone
+            alias iphone
+    account Rent
+        note Rental income
+    alias inc
+
+account Assets
+    account Cash
+        alias cash
+
+2024/01/15 Paycheck
+    salary                  $-1000
+    cash
+
+2024/02/01 App sale (Android)
+    android                    $5
+    cash
+
+2024/02/02 App sale (iPhone)
+    iphone                     $3
+    cash
+
+2024/03/01 Rent collected
+    Income:Rent             $-500
+    cash
+
+2024/04/01 Deposit
+    inc                      $-20
+    cash
+
+test --strict -f $FILE accounts
+Assets
+Assets:Cash
+Income
+Income:Apps
+Income:Apps:Android
+Income:Apps:iPhone
+Income:Rent
+Income:Salary
+end test
+
+test --strict -f $FILE reg Income
+24-Jan-15 Paycheck              Income:Salary                $-1000       $-1000
+24-Feb-01 App sale (Android)    Income:Apps:Android              $5        $-995
+24-Feb-02 App sale (iPhone)     Income:Apps:iPhone               $3        $-992
+24-Mar-01 Rent collected        Income:Rent                   $-500       $-1492
+24-Apr-01 Deposit               Income                         $-20       $-1512
+end test
+
+test --strict -f $FILE bal Income
+              $-1512  Income
+                  $8    Apps
+                  $5      Android
+                  $3      iPhone
+               $-500    Rent
+              $-1000    Salary
+--------------------
+              $-1512
+end test
