@@ -1,0 +1,6 @@
+test python test/regress/759.py
+Expenses:Food: symbol='EUR' == 'EUR' -> True, != 'EUR' -> False
+Assets:Cash: symbol='EUR' == 'EUR' -> True, != 'EUR' -> False
+Expenses:Food: symbol='$' == 'EUR' -> False, != 'EUR' -> True
+Assets:Cash: symbol='$' == 'EUR' -> False, != 'EUR' -> True
+end test
