@@ -631,6 +631,16 @@ amount_t& amount_t::operator+=(const amount_t& amt) {
     if (quantity->prec < amt.quantity->prec)
       quantity->prec = amt.quantity->prec;
 
+  // Clear BIGINT_COST_PREC on the result: this flag marks amounts that
+  // were produced by set_cost_precision() on an auto-inferred null
+  // posting (issue #1692), and it changes how is_zero() and print()
+  // treat the amount against a zero-precision commodity.  Letting the
+  // flag propagate through sums would cause derived running totals and
+  // rounding residuals to inherit it spuriously, emitting ghost
+  // adjustments (issue #717).
+  if (quantity->has_flags(BIGINT_COST_PREC))
+    quantity->drop_flags(BIGINT_COST_PREC);
+
   return *this;
 }
 
@@ -663,6 +673,12 @@ amount_t& amount_t::operator-=(const amount_t& amt) {
   if (has_commodity() == amt.has_commodity())
     if (quantity->prec < amt.quantity->prec)
       quantity->prec = amt.quantity->prec;
+
+  // See the comment in operator+= -- BIGINT_COST_PREC must not
+  // propagate through arithmetic, or running-total residuals inherit
+  // it and surface as non-zero (issues #1692 / #717).
+  if (quantity->has_flags(BIGINT_COST_PREC))
+    quantity->drop_flags(BIGINT_COST_PREC);
 
   return *this;
 }
@@ -1351,7 +1367,17 @@ bool amount_t::is_zero() const {
     throw_(amount_error, _("Cannot determine if an uninitialized amount is zero"));
 
   if (has_commodity()) {
-    if (keep_precision() || quantity->prec <= commodity().precision()) {
+    // For amounts flagged with BIGINT_COST_PREC against a zero-precision
+    // commodity, print() treats quantity->prec as the effective display
+    // precision.  Mirror that here so inferred balancing postings like
+    // "-0.4 Y" (where Y's default display precision is 0) are not treated
+    // as zero, which would hide them from output and break the accounting
+    // equation (issue #1692).
+    precision_t check_prec = commodity().precision();
+    if (check_prec == 0 && quantity->has_flags(BIGINT_COST_PREC))
+      check_prec = quantity->prec;
+
+    if (keep_precision() || quantity->prec <= check_prec) {
       return is_realzero();
     } else if (is_realzero()) {
       return true;
@@ -1362,7 +1388,7 @@ bool amount_t::is_zero() const {
       DEBUG("amount.is_zero", "We have to print the number to check for zero");
 
       std::ostringstream out;
-      stream_out_mpq(out, MP(quantity), commodity().precision());
+      stream_out_mpq(out, MP(quantity), check_prec);
 
       string output = out.str(); // NOLINT(bugprone-unused-local-non-trivial-variable)
       if (!output.empty()) {
