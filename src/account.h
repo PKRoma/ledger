@@ -61,6 +61,7 @@
 
 #include <limits>
 
+#include "item.h"
 #include "scope.h"
 #include "types.h"
 
@@ -108,6 +109,12 @@ public:
   std::optional<expr_t>
       value_expr; ///< Custom valuation expression overriding commodity-level valuation.
 
+  /// Structured metadata tags parsed from `;`-prefixed comment lines that
+  /// follow an `account` directive.  Shares item_t's case-insensitive
+  /// string_map type so account tags interoperate with the same tag/meta
+  /// expressions already used for transactions and postings (issue #1681).
+  optional<item_t::string_map> metadata;
+
   mutable string _fullname; ///< Cached colon-joined full name, computed lazily by fullname().
 
   account_t(account_t* _parent = nullptr, const string& _name = "",
@@ -123,7 +130,8 @@ public:
   // has an independent (empty) posting history.
   account_t(const account_t& other)
       : supports_flags<>(other.flags()), scope_t(), parent(other.parent), name(other.name),
-        note(other.note), depth(other.depth), accounts(other.accounts) {
+        note(other.note), depth(other.depth), accounts(other.accounts),
+        metadata(other.metadata) {
     TRACE_CTOR(account_t, "copy");
   }
   account_t& operator=(const account_t&) = default;
@@ -229,6 +237,60 @@ public:
 
   posts_list::iterator posts_begin() { return posts.begin(); }
   posts_list::iterator posts_end() { return posts.end(); }
+
+  /**
+   * @brief Test whether a metadata tag is set on this account.
+   * @param tag      Tag name to look up (case-insensitive).
+   * @param inherit  If true, also search ancestor accounts.
+   */
+  bool has_tag(const string& tag, bool inherit = true) const;
+
+  /**
+   * @brief Test whether any tag matching a regex pattern exists on this account.
+   * @param tag_mask    Regex to match against tag names.
+   * @param value_mask  Optional regex to additionally match the tag's value.
+   * @param inherit     If true, also search ancestor accounts.
+   */
+  bool has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask = {},
+               bool inherit = true) const;
+
+  /**
+   * @brief Retrieve the value of a metadata tag.
+   * @param tag      Tag name to look up (case-insensitive).
+   * @param inherit  If true, and the tag is not set here, search ancestor accounts.
+   * @return The tag's value, or nullopt if the tag is not found.
+   */
+  std::optional<value_t> get_tag(const string& tag, bool inherit = true) const;
+
+  /**
+   * @brief Retrieve the first tag value matching a regex pattern.
+   * @param tag_mask    Regex to match against tag names.
+   * @param value_mask  Optional regex to additionally match the tag's value.
+   * @param inherit     If true, also search ancestor accounts.
+   */
+  std::optional<value_t> get_tag(const mask_t& tag_mask,
+                                 const std::optional<mask_t>& value_mask = {},
+                                 bool inherit = true) const;
+
+  /**
+   * @brief Set or overwrite a metadata tag on this account, creating the map if needed.
+   * @param tag                Tag name (case-insensitive key).
+   * @param value              Optional value to associate with the tag.
+   * @param overwrite_existing If false, an existing tag is left untouched.
+   */
+  item_t::string_map::iterator set_tag(const string& tag,
+                                       const std::optional<value_t>& value = {},
+                                       bool overwrite_existing = true);
+
+  /**
+   * @brief Parse metadata tags from a comment line.
+   *
+   * Recognizes the same `:tag1:tag2:` and `Key: value` / `Key:: expr`
+   * syntaxes that `item_t::parse_tags` handles, but without the
+   * bracketed-date support since accounts are not dated.  The scope is
+   * bound through this account when evaluating `Key:: expr` forms.
+   */
+  void parse_tags(const char* p, scope_t& scope, bool overwrite_existing = true);
 
   /**
    * @brief Dispatch table for expression function lookups.
