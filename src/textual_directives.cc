@@ -287,7 +287,13 @@ void instance_t::include_directive(char* line) {
 
   DEBUG("textual.include", "include: " << line);
 
-  if (line[0] != '/' && line[0] != '\\' && line[0] != '~') {
+  // Detect absolute paths so they are not joined with the parent directory.
+  // In addition to the POSIX-style leading '/', '\', and '~' checks, we
+  // consult std::filesystem::path::is_absolute() which recognizes Windows
+  // drive-letter paths such as `D:/ledger/main.ledger` (issue #1670).
+  path include_path(line);
+  if (line[0] != '/' && line[0] != '\\' && line[0] != '~' &&
+      !include_path.is_absolute()) {
     DEBUG("textual.include", "received a relative path");
     DEBUG("textual.include", "parent file path: " << context.pathname);
     path parent_path = context.pathname.parent_path();
@@ -298,7 +304,7 @@ void instance_t::include_directive(char* line) {
       DEBUG("textual.include", "normalized path: " << filename.string());
     }
   } else {
-    filename = line;
+    filename = include_path;
   }
 
   filename = resolve_path(filename);
