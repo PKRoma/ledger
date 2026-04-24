@@ -60,10 +60,40 @@
 
 namespace ledger {
 
+namespace {
+/// @brief Emit @p formatted to @p out, splicing @p append_format in just
+///        before the final newline (if any).
+///
+/// The main line formats used by @ref format_posts and @ref format_accounts
+/// typically end with `\n`, and `--append-format` is meant to appear at the
+/// end of the *same* line -- not on a subsequent line.  This helper
+/// therefore strips a single trailing `\n`, writes the append expansion,
+/// then restores the newline.  If @p formatted has no trailing newline the
+/// append output is simply concatenated.  A null @p append_format_ptr (or
+/// an empty @p formatted) reverts to a plain write.
+inline void write_with_append(std::ostream& out, const string& formatted, format_t* append_format_ptr,
+                              scope_t& scope) {
+  if (!append_format_ptr || !*append_format_ptr || formatted.empty()) {
+    out << formatted;
+    return;
+  }
+
+  if (formatted.back() == '\n') {
+    out.write(formatted.data(), static_cast<std::streamsize>(formatted.size() - 1));
+    out << (*append_format_ptr)(scope);
+    out << '\n';
+  } else {
+    out << formatted;
+    out << (*append_format_ptr)(scope);
+  }
+}
+} // namespace
+
 /*--- format_posts: Register Command Output ---*/
 
 format_posts::format_posts(report_t& _report, const string& format,
-                           const optional<string>& _prepend_format, std::size_t _prepend_width)
+                           const optional<string>& _prepend_format, std::size_t _prepend_width,
+                           const optional<string>& _append_format)
     : report(_report), prepend_width(_prepend_width), last_xact(nullptr), last_post(nullptr),
       first_report_title(true) {
   // Split the format string on "%/" into up to three sub-formats:
@@ -91,6 +121,9 @@ format_posts::format_posts(report_t& _report, const string& format,
 
   if (_prepend_format)
     prepend_format.parse_format(*_prepend_format);
+
+  if (_append_format)
+    append_format.parse_format(*_append_format);
 
   TRACE_CTOR(format_posts, "report&, const string&, bool");
 }
@@ -139,14 +172,14 @@ void format_posts::operator()(post_t& post) {
         bind_scope_t xact_scope(report, *last_xact);
         out << between_format(xact_scope);
       }
-      out << first_line_format(bound_scope);
+      write_with_append(out, first_line_format(bound_scope), &append_format, bound_scope);
       last_xact = post.xact;
     } else if (last_post && last_post->date() != post.date()) {
-      out << first_line_format(bound_scope);
+      write_with_append(out, first_line_format(bound_scope), &append_format, bound_scope);
     } else {
       if (last_post && last_post->payee() != post.payee())
         post.xdata().add_flags(POST_EXT_PAYEE_CHANGED);
-      out << next_lines_format(bound_scope);
+      write_with_append(out, next_lines_format(bound_scope), &append_format, bound_scope);
     }
     // NOLINTEND(bugprone-branch-clone)
 
@@ -159,7 +192,8 @@ void format_posts::operator()(post_t& post) {
 
 format_accounts::format_accounts(report_t& _report, const string& format,
                                  const optional<string>& _prepend_format,
-                                 std::size_t _prepend_width)
+                                 std::size_t _prepend_width,
+                                 const optional<string>& _append_format)
     : report(_report), prepend_width(_prepend_width), disp_pred(), first_report_title(true) {
   const char* f = format.c_str();
 
@@ -182,6 +216,9 @@ format_accounts::format_accounts(report_t& _report, const string& format,
 
   if (_prepend_format)
     prepend_format.parse_format(*_prepend_format);
+
+  if (_append_format)
+    append_format.parse_format(*_append_format);
 
   TRACE_CTOR(format_accounts, "report&, const string&");
 }
@@ -218,7 +255,7 @@ std::size_t format_accounts::post_account(account_t& account, const bool flat) {
       out << prepend_format(bound_scope);
     }
 
-    out << account_line_format(bound_scope);
+    write_with_append(out, account_line_format(bound_scope), &append_format, bound_scope);
 
     return 1;
   }
@@ -288,7 +325,7 @@ void format_accounts::flush() {
       static_cast<std::ostream&>(report.output_stream) << prepend_format(bound_scope);
     }
 
-    out << total_line_format(bound_scope);
+    write_with_append(out, total_line_format(bound_scope), &append_format, bound_scope);
   }
 
   out.flush();
@@ -317,8 +354,10 @@ void collect_known_accounts(account_t& account, report_accounts::accounts_report
 void report_accounts::flush() {
   std::ostream& out(report.output_stream);
   format_t prepend_format;
+  format_t append_format;
   std::size_t prepend_width = 0;
   bool do_prepend_format;
+  bool do_append_format;
 
   do_prepend_format = report.HANDLED(prepend_format_);
   if (do_prepend_format) {
@@ -328,18 +367,26 @@ void report_accounts::flush() {
                         : 0;
   }
 
+  do_append_format = report.HANDLED(append_format_);
+  if (do_append_format)
+    append_format.parse_format(report.HANDLER(append_format_).str());
+
   collect_known_accounts(*report.session.journal->master, accounts);
 
   for (accounts_pair& entry : accounts) {
+    bind_scope_t bound_scope(report, *entry.first);
+
     if (do_prepend_format) {
-      bind_scope_t bound_scope(report, *entry.first);
       out.width(static_cast<std::streamsize>(prepend_width));
       out << prepend_format(bound_scope);
     }
 
     if (report.HANDLED(count))
       out << entry.second << ' ';
-    out << *entry.first << '\n';
+    out << *entry.first;
+    if (do_append_format)
+      out << append_format(bound_scope);
+    out << '\n';
   }
   out.flush();
 }

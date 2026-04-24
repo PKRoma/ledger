@@ -91,6 +91,7 @@ protected:
   format_t next_lines_format; ///< Format for subsequent postings in the same transaction.
   format_t between_format;    ///< Format printed between different transactions.
   format_t prepend_format;    ///< Optional prefix prepended to every output line.
+  format_t append_format;     ///< Optional suffix appended to every output line.
   std::size_t prepend_width;  ///< Width reserved for the prepend column.
   xact_t* last_xact;          ///< Tracks the previous transaction to detect boundaries.
   post_t* last_post;          ///< Tracks the previous posting to detect date changes.
@@ -99,7 +100,8 @@ protected:
 
 public:
   format_posts(report_t& _report, const string& format,
-               const optional<string>& _prepend_format = none, std::size_t _prepend_width = 0);
+               const optional<string>& _prepend_format = none, std::size_t _prepend_width = 0,
+               const optional<string>& _append_format = none);
   ~format_posts() override { TRACE_DTOR(format_posts); }
 
   /// @brief Set the group title to be printed before the next posting.
@@ -141,6 +143,7 @@ protected:
   format_t total_line_format;   ///< Format for the grand total line.
   format_t separator_format;    ///< Format for the separator between accounts and total.
   format_t prepend_format;      ///< Optional prefix prepended to every output line.
+  format_t append_format;       ///< Optional suffix appended to every output line.
   std::size_t prepend_width;    ///< Width reserved for the prepend column.
   predicate_t disp_pred;        ///< Display predicate from --display option.
   bool first_report_title;      ///< True until the first group title has been printed.
@@ -150,7 +153,8 @@ protected:
 
 public:
   format_accounts(report_t& _report, const string& _format,
-                  const optional<string>& _prepend_format = none, std::size_t _prepend_width = 0);
+                  const optional<string>& _prepend_format = none, std::size_t _prepend_width = 0,
+                  const optional<string>& _append_format = none);
   ~format_accounts() override { TRACE_DTOR(format_accounts); }
 
   /**

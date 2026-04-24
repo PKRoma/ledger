@@ -418,6 +418,14 @@ Set the width in characters of the amount column in the
 report.
 .It Fl \-anon
 Anonymize registry output, mostly for sending in bug reports.
+.It Fl \-append-format Ar FMT
+Append
+.Ar FMT
+to every line of the output, rendered just before the line's
+terminating newline.
+This is the symmetric counterpart to
+.Fl \-prepend-format
+and accepts the same format language.
 .It Fl \-ansi
 Use color if the terminal supports it.
 Alias for

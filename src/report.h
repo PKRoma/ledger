@@ -354,6 +354,7 @@ public:
     HANDLER(amount_).report(out);
     HANDLER(amount_data).report(out);
     HANDLER(anon).report(out);
+    HANDLER(append_format_).report(out);
     HANDLER(auto_match).report(out);
     HANDLER(aux_date).report(out);
     HANDLER(average).report(out);
@@ -561,6 +562,7 @@ public:
 
   OPTION(report_t, amount_data); // -j
   OPTION(report_t, anon);
+  OPTION(report_t, append_format_);
   OPTION(report_t, auto_match);
 
   OPTION_(
