@@ -219,6 +219,14 @@ item_t::string_map::iterator item_t::set_tag(const string& tag, const std::optio
  * are all recorded.
  */
 void item_t::parse_tags(const char* p, scope_t& scope, bool overwrite_existing) {
+  // Skip any additional leading `;` characters (with interleaved whitespace).
+  // The first `;` has already been consumed by the caller in textual_xacts.cc,
+  // but comments written as `;;Key: value` or `;  ;Key: value` would otherwise
+  // see the extra semicolon glom onto the tag name (fixes #1786).  Treat a run
+  // of leading semicolons as an extended comment prefix.
+  while (*p == ' ' || *p == '\t' || *p == ';')
+    ++p;
+
   if (const char* b = std::strchr(p, '[')) {
     if (*(b + 1) != '\0' &&
         (std::isdigit(static_cast<unsigned char>(*(b + 1))) || *(b + 1) == '=')) {
