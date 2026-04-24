@@ -501,8 +501,8 @@ commodity_pool_t::parse_price_directive(char* line, bool do_not_add_price, bool 
   char* price_ptr = skip_ws(symbol_and_price);
   if (price_ptr && *price_ptr == '(') {
     expr_t value_expr{string(price_ptr)};
-    value_t result(value_expr.calc(scope_t::default_scope ? *scope_t::default_scope
-                                                          : *scope_t::empty_scope));
+    value_t result(
+        value_expr.calc(scope_t::default_scope ? *scope_t::default_scope : *scope_t::empty_scope));
     if (result.is_balance() && result.as_balance().amounts.size() > 1) {
       // Store the literal balance as the commodity's value expression so
       // that find_price_from_expr can reprice it to whatever target
