@@ -1,0 +1,54 @@
+; Regression test for issue #1802: sort lots by date with --lots.
+;
+; Reproduces the scenario from the issue: many small periodic purchases
+; at varying prices.  The reporter observed that `bal --lots` sorts the
+; lots by price (the default compare_by_commodity ordering) which makes
+; it tedious to see when each purchase was made.  `--lot-dates` orders
+; by date but strips the price annotation, so the per-lot cost basis is
+; lost.
+;
+; The `--lots-fifo` and `--lots-lifo` options (added for issue #1558)
+; display lots in date order while retaining the price annotation, which
+; is what the issue requested.
+
+2024/01/15 * Periodic buy
+    Assets:Brokerage        5 HY {$48.00} [2024/01/15]
+    Assets:Cash
+
+2024/02/15 * Periodic buy
+    Assets:Brokerage        5 HY {$52.00} [2024/02/15]
+    Assets:Cash
+
+2024/03/15 * Periodic buy
+    Assets:Brokerage        5 HY {$46.00} [2024/03/15]
+    Assets:Cash
+
+2024/04/15 * Periodic buy
+    Assets:Brokerage        5 HY {$50.00} [2024/04/15]
+    Assets:Cash
+
+; With --lots the default ordering sorts lots by price, so the January
+; purchase (the earliest) does not appear first.
+test bal --lots Assets:Brokerage
+5 HY {$46} [2024/03/15]
+5 HY {$48} [2024/01/15]
+5 HY {$50} [2024/04/15]
+5 HY {$52} [2024/02/15]  Assets:Brokerage
+end test
+
+; --lots-fifo sorts oldest-first while keeping prices and dates, which
+; is the ordering the issue asked for.
+test bal --lots-fifo Assets:Brokerage
+5 HY {$48} [2024/01/15]
+5 HY {$52} [2024/02/15]
+5 HY {$46} [2024/03/15]
+5 HY {$50} [2024/04/15]  Assets:Brokerage
+end test
+
+; --lots-lifo gives the reverse chronological order.
+test bal --lots-lifo Assets:Brokerage
+5 HY {$50} [2024/04/15]
+5 HY {$46} [2024/03/15]
+5 HY {$52} [2024/02/15]
+5 HY {$48} [2024/01/15]  Assets:Brokerage
+end test
