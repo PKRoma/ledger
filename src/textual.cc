@@ -232,6 +232,35 @@ std::streamsize instance_t::read_line(char*& line) {
   return len;
 }
 
+std::size_t instance_t::peek_line_indent() {
+  if (!in.good() || in.eof())
+    return 0;
+
+  int first = in.peek();
+  if (in.eof() || (first != ' ' && first != '\t'))
+    return 0;
+
+  std::streampos saved_pos = in.tellg();
+  if (saved_pos == std::streampos(-1)) {
+    // Non-seekable stream: fall back to reporting a single unit of indent
+    // so callers still treat the line as a continuation.
+    return 1;
+  }
+
+  std::size_t count = 0;
+  while (in.good()) {
+    int c = in.peek();
+    if (c != ' ' && c != '\t')
+      break;
+    in.get();
+    count++;
+  }
+
+  in.clear();
+  in.seekg(saved_pos);
+  return count;
+}
+
 /*--- Line Dispatch ---*/
 
 xact_t* instance_t::read_next_directive(bool& error_flag, xact_t* previous_xact) {

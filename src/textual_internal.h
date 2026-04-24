@@ -198,6 +198,13 @@ public:
   bool peek_whitespace_line() {
     return (in.good() && !in.eof() && (in.peek() == ' ' || in.peek() == '\t'));
   }
+
+  /// @brief Count leading spaces/tabs on the next line without consuming it.
+  /// @return Number of leading whitespace characters, or 0 if the next line
+  ///         is not indented (or the stream is at EOF).  Treats one tab and
+  ///         one space as equal; callers requiring consistent indentation
+  ///         must enforce it themselves.
+  std::size_t peek_line_indent();
 #if HAVE_BOOST_PYTHON
   bool peek_blank_line() {
     return (in.good() && !in.eof() && (in.peek() == '\n' || in.peek() == '\r'));
@@ -226,8 +233,17 @@ public:
   /*--- Account Directives ---*/
 
   /// @brief Handle the `account` directive and its indented sub-directives (alias, payee, value,
-  /// default, assert, check, note).
+  /// default, assert, check, note, account).
   void account_directive(char* line);
+
+  /// @brief Shared body for `account` parsing that also supports nested
+  ///        `account` sub-directives (issue #877).
+  /// @param line          The remainder of the "account NAME" line (just NAME, leading ws OK).
+  /// @param parent        Root account under which NAME is registered.
+  /// @param outer_indent  Indentation column of the "account NAME" line itself;
+  ///                      only sub-directives with strictly greater indentation
+  ///                      are consumed by this call.
+  void account_directive_body(char* line, account_t* parent, std::size_t outer_indent);
   void account_alias_directive(account_t* account,
                                string alias); ///< Register an alias name that maps to this account
   void account_payee_directive(
