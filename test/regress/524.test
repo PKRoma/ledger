@@ -1,8 +1,17 @@
-; Regression test for issue #524: --lots do not subtract when price precision is small
-; https://github.com/ledger/ledger/issues/524
-; When a lot price has many decimal places (e.g. 1.026087 EUR), ledger fails to
-; combine buy and sell lots. Instead of showing 8.00 APPL (23 - 15), it shows the
-; lots separately as 23.00 APPL and -15.00 APPL.
+; Regression test for issue #524: --lots do not subtract when price
+; precision is small (https://github.com/ledger/ledger/issues/524).
+;
+; When a lot price computed from @@ (total cost) has a non-terminating
+; decimal expansion (e.g. 23.60 / 23 = 1.02608695652...), ledger rounds
+; it to amount.precision + commodity.precision + 6 digits internally.
+; A user referencing that lot via its displayed value (e.g. {1.026087 EUR})
+; stores a strictly different rational.  Previously the two annotated
+; commodities failed to combine, leaving the Broker account with both
+; +23 APPL and -15 APPL lots instead of a net +8 APPL lot.
+;
+; The fuzzy-match path in commodity_pool_t::find_or_create now merges
+; such references with the originating computed lot when their prices
+; agree to the lesser of the two precisions.
 
 commodity APPL
     note Apple
@@ -13,7 +22,7 @@ commodity EUR
     format 1,000.00 EUR
 
 2017-01-20 Buy Apple
-    Broker:Stock                       23 APPL @@ 23.6 EUR
+    Broker:Stock                       23 APPL @@ 23.60 EUR
     Openning:Balance
 
 2017-11-28 Sell Apple
@@ -21,14 +30,23 @@ commodity EUR
     Broker:Profits
 
 test bal broker --lots
-23.00 APPL {1.026087 EUR} [2017/01/20]
--15.00 APPL {1.026087 EUR} [2017/01/20]
+8.00 APPL {1.02608696 EUR} [2017/01/20]
+                              15.39 EUR  Broker
+           15.39 EUR    Profits
+8.00 APPL {1.02608696 EUR} [2017/01/20]    Stock
+--------------------
+8.00 APPL {1.02608696 EUR} [2017/01/20]
+                              15.39 EUR
+end test
+
+; The same journal, reported as a plain balance, should net out to a
+; single non-zero APPL holding (not two offsetting rows).
+test bal broker
+           8.00 APPL
            15.39 EUR  Broker
            15.39 EUR    Profits
-23.00 APPL {1.026087 EUR} [2017/01/20]
--15.00 APPL {1.026087 EUR} [2017/01/20]    Stock
+           8.00 APPL    Stock
 --------------------
-23.00 APPL {1.026087 EUR} [2017/01/20]
--15.00 APPL {1.026087 EUR} [2017/01/20]
+           8.00 APPL
            15.39 EUR
 end test
