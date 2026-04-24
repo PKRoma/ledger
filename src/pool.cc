@@ -305,8 +305,8 @@ commodity_t* commodity_pool_t::find_annotation_fuzzy(const string& symbol,
     if (existing.has_flags(ANNOTATION_PRICE_CALCULATED) == lookup_is_calc)
       continue;
 
-    const int min_prec = static_cast<int>(
-        std::min(details.price->precision(), existing.price->precision()));
+    const int min_prec =
+        static_cast<int>(std::min(details.price->precision(), existing.price->precision()));
     amount_t rounded_lookup = *details.price;
     rounded_lookup.in_place_roundto(min_prec);
     amount_t rounded_existing = *existing.price;
