@@ -292,8 +292,7 @@ void instance_t::include_directive(char* line) {
   // consult std::filesystem::path::is_absolute() which recognizes Windows
   // drive-letter paths such as `D:/ledger/main.ledger` (issue #1670).
   path include_path(line);
-  if (line[0] != '/' && line[0] != '\\' && line[0] != '~' &&
-      !include_path.is_absolute()) {
+  if (line[0] != '/' && line[0] != '\\' && line[0] != '~' && !include_path.is_absolute()) {
     DEBUG("textual.include", "received a relative path");
     DEBUG("textual.include", "parent file path: " << context.pathname);
     path parent_path = context.pathname.parent_path();
