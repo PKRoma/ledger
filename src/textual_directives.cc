@@ -252,17 +252,92 @@ void instance_t::option_directive(char* line) {
     throw_(option_error, _f("Illegal option --%1%") % (line + 2));
 }
 
+namespace {
+
+/// Recursively expand a glob path by walking its components.
+///
+/// For each component we enumerate the current base directory and match
+/// entries against the component interpreted as a shell glob.  Using
+/// `mask_t::assign_glob` (which is case-sensitive) rather than a direct
+/// filesystem lookup ensures that `include FOO.dat` does not silently
+/// match a differently-cased `foo.dat` on case-insensitive filesystems
+/// (issue #1660).  Matched entries drive the next level of recursion;
+/// the final component contributes regular files to @p results.
+///
+/// This allows patterns with glob metacharacters in any component --
+/// not just the filename -- to match across multiple directory levels
+/// (issue #1214).
+void expand_glob_path(const path& base, const std::vector<path>& components, std::size_t index,
+                      std::vector<path>& results) {
+  if (index == components.size())
+    return;
+
+  if (!exists(base) || !is_directory(base))
+    return;
+
+  const string comp = components[index].string();
+  mask_t glob;
+  glob.assign_glob('^' + comp + '$');
+
+  std::vector<path> sorted_entries;
+  std::copy(std::filesystem::directory_iterator(base), std::filesystem::directory_iterator(),
+            std::back_inserter(sorted_entries));
+  std::sort(sorted_entries.begin(), sorted_entries.end());
+
+  const bool is_last = (index + 1 == components.size());
+
+  for (const path& entry : sorted_entries) {
+    string name = entry.filename().string();
+    if (!utf8::is_valid(name.begin(), name.end())) {
+      DEBUG("textual.include", "Skipping file with invalid UTF-8 name: " << name);
+      continue;
+    }
+    if (!glob.match(name))
+      continue;
+
+    if (is_last) {
+      if (is_regular_file(entry))
+        results.push_back(entry);
+    } else if (is_directory(entry)) {
+      expand_glob_path(entry, components, index + 1, results);
+    }
+  }
+}
+
+/// Split @p filename into a starting @p base directory and the list of
+/// remaining path components that may contain glob metacharacters.
+///
+/// For absolute paths the base is the root path (e.g. `/`); for relative
+/// paths the base is the current directory so that enumeration works when
+/// the first component is itself a glob.
+void split_glob_path(const path& filename, path& base, std::vector<path>& components) {
+  if (filename.has_root_path()) {
+    base = filename.root_path();
+    for (const path& c : filename.relative_path())
+      components.push_back(c);
+  } else {
+    base = path(".");
+    for (const path& c : filename)
+      components.push_back(c);
+  }
+}
+
+} // namespace
+
 /**
  * @brief Process an `include` directive.
  *
- * The include path may contain glob wildcards (e.g. `include *.ledger`).
- * Paths are resolved relative to the directory of the current file.
- * Recursive includes are detected and skipped; a hard depth limit of 100
- * prevents runaway include chains.
+ * The include path may contain shell glob wildcards in any path
+ * component, not just the filename -- wildcards in parent directory
+ * components are expanded as well, so a single directive can match
+ * files across multiple directory levels.  Paths are resolved relative
+ * to the directory of the current file.  Recursive includes are
+ * detected and skipped; a hard depth limit of 100 prevents runaway
+ * include chains.
  *
  * For each matched file, a new instance_t is created and parsed.  The
- * parent file's year/epoch state is saved and restored after the include
- * so that `year` directives in included files do not leak back.
+ * parent file's year/epoch state is saved and restored after the
+ * include so that `year` directives in included files do not leak back.
  */
 void instance_t::include_directive(char* line) {
   int include_depth = 0;
@@ -304,93 +379,75 @@ void instance_t::include_directive(char* line) {
   filename = resolve_path(filename);
   DEBUG("textual.include", "resolved path: " << filename.string());
 
-  mask_t glob;
-  path parent_path = filename.parent_path();
-  glob.assign_glob('^' + filename.filename().string() + '$');
+  path base;
+  std::vector<path> components;
+  split_glob_path(filename, base, components);
+
+  std::vector<path> matched_files;
+  expand_glob_path(base, components, 0, matched_files);
 
   bool files_found = false;
-  if (exists(parent_path)) {
-    std::filesystem::directory_iterator end;
-
-    // Sort parent_path since on some file systems it is unsorted.
-    std::vector<path> sorted_parent_path;
-    std::copy(std::filesystem::directory_iterator(parent_path),
-              std::filesystem::directory_iterator(), std::back_inserter(sorted_parent_path));
-    std::sort(sorted_parent_path.begin(), sorted_parent_path.end());
-
-    for (std::vector<path>::const_iterator iter(sorted_parent_path.begin()),
-         it_end(sorted_parent_path.end());
-         iter != it_end; ++iter) {
-      if (is_regular_file(*iter)) {
-        string base = (*iter).filename().string();
-        // Skip files with invalid UTF-8 in their names to avoid encoding errors
-        if (!utf8::is_valid(base.begin(), base.end())) {
-          DEBUG("textual.include", "Skipping file with invalid UTF-8 name: " << base);
-          continue;
-        }
-        if (context.pathname == *iter) {
-          DEBUG("textual.include", "Avoiding recursive include of: " << *iter);
-          continue;
-        }
-        if (glob.match(base)) {
-          journal_t* journal = context.journal;
-          account_t* master = top_account();
-          scope_t* scope = context.scope;
-          std::size_t& errors = context.errors;
-          std::size_t& count = context.count;
-          std::size_t& sequence = context.sequence;
-
-          DEBUG("textual.include", "Including: " << *iter);
-          DEBUG("textual.include", "Master account: " << master->fullname());
-
-          context_stack.push(*iter);
-
-          context_stack.get_current().journal = journal;
-          context_stack.get_current().master = master;
-          context_stack.get_current().scope = scope;
-
-          parse_context_t* save_current_context = journal->current_context;
-          journal->current_context = &context_stack.get_current();
-
-          // Save year state so that year/Y directives inside the included
-          // file do not bleed back into the parent file after the include
-          // returns.  This mirrors what end_apply_directive does for the
-          // "apply year" / "end apply year" pair.
-          optional<datetime_t> saved_epoch = epoch;
-          optional<int> saved_year_directive_year = year_directive_year;
-
-          try {
-            instance_t instance(context_stack, context_stack.get_current(), this, no_assertions,
-                                hash_type);
-            instance.apply_stack.push_front(application_t("account", master));
-            instance.parse();
-          } catch (...) {
-            errors += context_stack.get_current().errors;
-            count += context_stack.get_current().count;
-            sequence += context_stack.get_current().sequence;
-
-            epoch = saved_epoch;
-            year_directive_year = saved_year_directive_year;
-
-            journal->current_context = save_current_context;
-            context_stack.pop();
-            throw;
-          }
-
-          epoch = saved_epoch;
-          year_directive_year = saved_year_directive_year;
-
-          errors += context_stack.get_current().errors;
-          count += context_stack.get_current().count;
-          sequence += context_stack.get_current().sequence;
-
-          journal->current_context = save_current_context;
-          context_stack.pop();
-
-          files_found = true;
-        }
-      }
+  for (const path& matched : matched_files) {
+    if (context.pathname == matched) {
+      DEBUG("textual.include", "Avoiding recursive include of: " << matched);
+      continue;
     }
+
+    journal_t* journal = context.journal;
+    account_t* master = top_account();
+    scope_t* scope = context.scope;
+    std::size_t& errors = context.errors;
+    std::size_t& count = context.count;
+    std::size_t& sequence = context.sequence;
+
+    DEBUG("textual.include", "Including: " << matched);
+    DEBUG("textual.include", "Master account: " << master->fullname());
+
+    context_stack.push(matched);
+
+    context_stack.get_current().journal = journal;
+    context_stack.get_current().master = master;
+    context_stack.get_current().scope = scope;
+
+    parse_context_t* save_current_context = journal->current_context;
+    journal->current_context = &context_stack.get_current();
+
+    // Save year state so that year/Y directives inside the included
+    // file do not bleed back into the parent file after the include
+    // returns.  This mirrors what end_apply_directive does for the
+    // "apply year" / "end apply year" pair.
+    optional<datetime_t> saved_epoch = epoch;
+    optional<int> saved_year_directive_year = year_directive_year;
+
+    try {
+      instance_t instance(context_stack, context_stack.get_current(), this, no_assertions,
+                          hash_type);
+      instance.apply_stack.push_front(application_t("account", master));
+      instance.parse();
+    } catch (...) {
+      errors += context_stack.get_current().errors;
+      count += context_stack.get_current().count;
+      sequence += context_stack.get_current().sequence;
+
+      epoch = saved_epoch;
+      year_directive_year = saved_year_directive_year;
+
+      journal->current_context = save_current_context;
+      context_stack.pop();
+      throw;
+    }
+
+    epoch = saved_epoch;
+    year_directive_year = saved_year_directive_year;
+
+    errors += context_stack.get_current().errors;
+    count += context_stack.get_current().count;
+    sequence += context_stack.get_current().sequence;
+
+    journal->current_context = save_current_context;
+    context_stack.pop();
+
+    files_found = true;
   }
 
   if (!files_found)
