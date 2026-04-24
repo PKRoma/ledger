@@ -10069,17 +10069,33 @@ or the depth of the account
 
 @defvar display_amount
 @defvarx t
-@value{FIXME:UNDOCUMENTED}
+The value that would be shown in the amount column of the current
+posting after applying @option{--amount}, @option{--market}/@option{-V},
+@option{--exchange}/@option{-X}, and any other report-level
+transformations.  The single-letter alias @code{t} is the same value.
+
+This is distinct from the raw @code{amount}/@code{a}, which is the
+posting's literal amount as parsed from the journal -- @code{display_amount}
+is what actually appears in the rendered report, so it's the value to
+reach for in format strings and @option{--bold-if} predicates.
 @end defvar
 
 @defun display_amount amount
 Format amount for display.
 @end defun
 
-@c FIXME
 @defvar display_total
 @defvarx T
-@value{FIXME:UNDOCUMENTED}
+The running or account total that would be shown in the total column
+of the current row after applying @option{--total}, @option{--market},
+@option{--exchange}, and related options.  The single-letter alias
+@code{T} is the same value.
+
+@code{display_total} and @code{display_amount} are what the rounding
+and balance-assignment filters consume, so referencing them (rather
+than the raw @code{total}/@code{amount}) in a custom @option{--format}
+or @option{--bold-if} expression keeps your output consistent with the
+numbers Ledger actually displays.
 @end defvar
 
 @defun display_total total
@@ -10399,9 +10415,19 @@ Remove rounding from an amount.
 Return unrounded version of amount.
 @end defun
 
-@defun value_date
-@value{FIXME:UNDOCUMENTED}
-@end defun
+@defvar value_date
+The effective date used for valuation when looking up market prices.
+For ordinary postings this is the same as @code{date}/@code{d}, but
+the reporting pipeline can override it -- for example, the
+@option{--period} machinery assigns the period-end date so that
+@code{market(total, value_date, exchange)} revalues the running total
+as of the end of each period rather than the original posting date.
+
+Use @code{value_date} (not @code{date}) in any custom market-value
+expression: passing the posting's literal date to @code{market} would
+defeat the pipeline's date override and give prices as of the wrong
+day.
+@end defvar
 
 
 @node Format Strings, Extending with Python, Value Expressions, Top
