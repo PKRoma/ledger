@@ -9291,38 +9291,84 @@ ordinary transactions are valid.
 @findex --limit @var{EXPR}
 @findex --display @var{EXPR}
 
-Ledger uses value expressions to make calculations for many different
-purposes:
+Value expressions are the small language Ledger uses to ask questions
+about postings and to compute the numbers that appear in reports.
+They provide variables (@code{account}, @code{amount}, @code{date},
+@dots{}), functions (@code{market}, @code{has_tag}, @code{abs},
+@dots{}), and the usual arithmetic, comparison, and logical
+operators.
+
+The expression engine is consulted in four distinct roles:
 
 @enumerate
+@item
+@strong{Predicates} -- a value expression acts as a filter when passed
+to @option{--limit @var{EXPR} (-l)}, @option{--display @var{EXPR}
+(-d)}, or @option{--only @var{EXPR}}.  Anything non-zero and
+non-empty counts as true.
 
 @item
-The values displayed in reports.
+@strong{Calculated values} -- options like @option{--amount
+@var{EXPR} (-t)} and @option{--total @var{VEXPR} (-T)} take an
+expression that Ledger evaluates for every posting or account to
+produce the numbers shown in the amount and total columns.
 
 @item
-For predicates (where truth is anything non-zero), to determine which
-postings are calculated (option @option{--limit @var{EXPR} (-l)}) or
-displayed (option @option{--display @var{EXPR} (-d)}).
+@strong{Sort keys} -- @option{--sort @var{VEXPR} (-S)} evaluates its
+argument for each posting or account and orders the report by the
+resulting value.
 
 @item
-For sorting criteria, to yield the sort key.
-
-@item
-In the matching criteria used by automated postings.
-
+@strong{Matching criteria} -- automated transactions, @code{assert}
+and @code{check} directives, the @code{expr} directive, and the
+@code{=} line of an automated transaction all evaluate a value
+expression in the posting's scope.
 @end enumerate
 
-Value expressions support most simple math and logic operators, in
-addition to a set of functions and variables.
+Value expressions also appear inside format strings (@pxref{Format
+Strings}).  Anything between @samp{%(@dots{})} in a format string is
+a value expression whose result is interpolated into the output.
 
-Note: Ledger also has ``query expressions,'' which are a shorthand
-that gets translated into value expressions before evaluation.  For
-instance, typing @samp{cash} on the command line is equivalent to
-@samp{(account =~ /cash/)}.  Query expressions don't add any
-functionality of their own -- they're purely a convenience at the
-command line.  Options like @option{--limit @var{EXPR} (-l)} always
-take a value expression, while bare arguments after the command name
-are treated as query expressions.
+Ledger exposes three small languages, and it helps to keep them
+straight:
+
+@itemize @bullet
+@item
+A @strong{query expression} is the bare shorthand you type after a
+command name -- @samp{ledger bal food} or @samp{ledger reg @@Amazon
+and not %personal}.  Queries are translated into value expressions
+before evaluation (@samp{food} becomes @samp{account =~ /food/},
+@samp{@@Amazon} becomes @samp{payee =~ /Amazon/}), so anything you
+can say with a query you can also say with @option{--limit}.  The
+@command{query} command prints the translation if you want to see
+it.
+
+@item
+A @strong{value expression} is the language described in this
+chapter.  Options that take an @var{EXPR} or @var{VEXPR} argument
+(@option{--limit}, @option{--amount}, @option{--total},
+@option{--display}, @option{--sort}, @option{--bold-if}, and the
+rest) always take a value expression.
+
+@item
+A @strong{format string} is a template that controls how a report is
+laid out.  Format strings contain literal text, @samp{%} directives,
+and embedded @samp{%(@dots{})} value expressions
+(@pxref{Format Strings}).
+@end itemize
+
+A single short example brings them together.  The command
+
+@smallexample @c command:validate
+$ ledger --limit 'account =~ /:Food/ and amount > $0' \
+         --sort 'amount' \
+         --format '%(date)  %-30(account)  %(amount)\n' \
+         reg
+@end smallexample
+
+uses a value expression for @option{--limit} (which postings to
+include), another for @option{--sort} (how to order them), and three
+more inside the format string (how to render each row).
 
 @c A function's argument is whatever follows it.  The following is
 @c a display predicate that I use with the @command{balance} command:
