@@ -541,8 +541,7 @@ void instance_t::account_directive(char* line) {
   account_directive_body(line, top_account(), 0);
 }
 
-void instance_t::account_directive_body(char* line, account_t* parent,
-                                        std::size_t outer_indent) {
+void instance_t::account_directive_body(char* line, account_t* parent, std::size_t outer_indent) {
   std::istream::pos_type beg_pos = context.line_beg_pos;
   std::size_t beg_linenum = context.linenum;
 
