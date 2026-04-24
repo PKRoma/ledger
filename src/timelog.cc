@@ -172,15 +172,27 @@ std::size_t clock_out_from_timelog(std::list<time_xact_t>& time_xacts, time_xact
 
 void time_log_t::close() {
   if (!time_xacts.empty()) {
-    std::list<account_t*> accounts;
+    datetime_t now = CURRENT_TIME();
 
+    // Drop any open check-ins whose check-in time is still in the future
+    // relative to the effective "now".  No time has elapsed yet for such
+    // entries, so there is nothing to record -- and auto-closing them at
+    // "now" would produce a check-out before the check-in (issue #1689).
+    for (auto it = time_xacts.begin(); it != time_xacts.end();) {
+      if (now < it->checkin)
+        it = time_xacts.erase(it);
+      else
+        ++it;
+    }
+
+    std::list<account_t*> accounts;
     for (time_xact_t& time_xact : time_xacts)
       accounts.push_back(time_xact.account);
 
     for (account_t* account : accounts) {
       DEBUG("timelog", "Clocking out from account " << account->fullname());
-      context.count += clock_out_from_timelog(
-          time_xacts, time_xact_t(none, CURRENT_TIME(), false, account), context);
+      context.count +=
+          clock_out_from_timelog(time_xacts, time_xact_t(none, now, false, account), context);
     }
     assert(time_xacts.empty());
   }
