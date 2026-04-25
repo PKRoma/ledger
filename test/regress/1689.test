@@ -1,0 +1,28 @@
+; Regression test for issue #1689: Error: Timelog check-out date less than
+; corresponding check-in.
+; https://github.com/ledger/ledger/issues/1689
+;
+; When a timelog has an open check-in whose timestamp is in the future
+; relative to the effective "now", ledger used to auto-close that entry
+; at CURRENT_TIME() and then fail with "Timelog check-out date less than
+; corresponding check-in".  Such future check-ins represent work that
+; has not yet started, so close() should silently drop them -- reports
+; still compute cleanly and the entry is picked up once "now" passes
+; the check-in time.
+
+i 2018-11-10 08:16:00 PROJ1
+o 2018-11-10 08:18:00
+i 2018-11-10 08:18:00 PROJ2
+
+; Before the PROJ2 check-in is reached, only PROJ1 is reported and
+; there is no error.
+test --now 2018/11/10 register --time-colon -p 2018/11/10
+18-Nov-10                       PROJ1                          2:0m         2:0m
+end test
+
+; Once "now" advances past the PROJ2 check-in, PROJ2 is auto-closed at
+; "now" and shows elapsed time as usual.
+test --now 2018/11/11 register --time-colon -p 2018/11/10
+18-Nov-10                       PROJ1                          2:0m         2:0m
+18-Nov-10                       PROJ2                        15:42h       15:44h
+end test
