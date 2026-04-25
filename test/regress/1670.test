@@ -1,0 +1,21 @@
+; Regression test for issue #1670 (absolute paths in include directives).
+;
+; On Windows, `include d:/ledger/main.ledger` used to be misinterpreted as a
+; relative path and joined with the parent file's directory, producing a
+; bogus path such as `<parent-dir>/d:/ledger/main.ledger`.  The include
+; directive now consults std::filesystem::path::is_absolute(), which
+; correctly recognizes drive-letter-rooted Windows paths in addition to the
+; POSIX `/`, `\`, and `~` prefixes.
+;
+; This test exercises the POSIX-side of the check: a leading-'/' absolute
+; path must continue to be used verbatim (not joined with the parent
+; directory) and the error message must report that same raw path when the
+; file does not exist.
+
+include /nonexistent-1670/abs.ledger
+
+test bal -> 1
+__ERROR__
+While parsing file "$FILE", line 15:
+Error: File to include was not found: /nonexistent-1670/abs.ledger
+end test
