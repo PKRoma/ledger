@@ -59,6 +59,7 @@
  */
 #pragma once
 
+#include "metadata.h"
 #include "scope.h"
 
 namespace ledger {
@@ -124,7 +125,7 @@ struct position_t {
  * The metadata system uses a custom case-insensitive comparator so that
  * `Payee`, `payee`, and `PAYEE` all refer to the same tag.
  */
-class item_t : public flags::supports_flags<uint_least16_t>, public scope_t {
+class item_t : public flags::supports_flags<uint_least16_t>, public metadata_t, public scope_t {
 public:
 #define ITEM_NORMAL 0x00 ///< No special flags; a regular user-entered item.
 #define ITEM_GENERATED                                                                             \
@@ -148,24 +149,13 @@ public:
    */
   enum state_t : uint8_t { UNCLEARED = 0, CLEARED, PENDING };
 
-  /// A metadata entry: an optional value paired with a bool indicating
-  /// whether the tag was parsed from a comment line (true) vs. set
-  /// programmatically (false).
-  using tag_data_t = std::pair<std::optional<value_t>, bool>;
-
-  /// Case-insensitive ordered map from tag names to their values.
-  /// The comparator function uses boost::algorithm::ilexicographical_compare
-  /// so that "Payee" and "payee" are treated as the same key.
-  using string_map = std::map<string, tag_data_t, std::function<bool(string, string)>>;
-
   scope_t*
       parent; ///< Enclosing scope for expression evaluation (e.g., the transaction for a posting).
-  state_t _state;                ///< Current clearing state (UNCLEARED, CLEARED, or PENDING).
-  optional<date_t> _date;        ///< Primary date of the item.
-  optional<date_t> _date_aux;    ///< Auxiliary (effective) date, written after `=` in date syntax.
-  optional<string> note;         ///< Free-form note text from `;` comment lines.
-  optional<position_t> pos;      ///< Source file location for error reporting and `print` output.
-  optional<string_map> metadata; ///< Structured metadata tags parsed from comment lines.
+  state_t _state;             ///< Current clearing state (UNCLEARED, CLEARED, or PENDING).
+  optional<date_t> _date;     ///< Primary date of the item.
+  optional<date_t> _date_aux; ///< Auxiliary (effective) date, written after `=` in date syntax.
+  optional<string> note;      ///< Free-form note text from `;` comment lines.
+  optional<position_t> pos;   ///< Source file location for error reporting and `print` output.
   bool defining_; ///< Re-entrancy guard for define(); prevents infinite recursion when setting tags
                   ///< triggers expression evaluation.
 
@@ -188,6 +178,12 @@ public:
    * postings for automated transactions.  Does not copy the parent
    * pointer (which is set separately by the owning transaction).
    */
+  /// Backwards-compatible aliases.  metadata storage and types now live on
+  /// metadata_t; keeping these names available avoids touching every call
+  /// site that references `item_t::string_map` (Python bindings, etc.).
+  using string_map = metadata_t::string_map;
+  using tag_data_t = metadata_t::tag_data_t;
+
   virtual void copy_details(const item_t& item) {
     set_flags(item.flags());
     set_state(item.state());
@@ -226,61 +222,13 @@ public:
   std::size_t seq() const { return pos ? pos->sequence : 0L; }
 
   /**
-   * @brief Test whether a metadata tag exists on this item.
-   * @param tag   Tag name to look up (case-insensitive).
-   * @param inherit  If true, also search ancestor scopes (overridden
-   *                 by post_t to check the parent transaction).
-   */
-  virtual bool has_tag(const string& tag, bool inherit = true) const;
-
-  /** @brief Test whether any tag matching a regex pattern exists.
-   * @param tag_mask    Regex to match against tag names.
-   * @param value_mask  Optional regex to additionally match the tag's value.
-   * @param inherit     If true, also search ancestor scopes.
-   */
-  virtual bool has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask = {},
-                       bool inherit = true) const;
-
-  /**
-   * @brief Retrieve the value of a metadata tag.
-   * @param tag   Tag name to look up (case-insensitive).
-   * @param inherit  If true, also search ancestor scopes.
-   * @return The tag's value, or nullopt if the tag does not exist.
-   */
-  virtual std::optional<value_t> get_tag(const string& tag, bool inherit = true) const;
-
-  /** @brief Retrieve the first tag value matching a regex pattern.
-   * @param tag_mask    Regex to match against tag names.
-   * @param value_mask  Optional regex to additionally match the tag's value.
-   * @param inherit     If true, also search ancestor scopes.
-   */
-  virtual std::optional<value_t> get_tag(const mask_t& tag_mask,
-                                         const std::optional<mask_t>& value_mask = {},
-                                         bool inherit = true) const;
-
-  /**
-   * @brief Set or overwrite a metadata tag on this item.
-   * @param tag                Tag name (case-insensitive key).
-   * @param value              Optional value to associate with the tag.
-   * @param overwrite_existing If false, an existing tag is not modified.
-   * @return Iterator to the inserted or existing tag entry.
-   *
-   * If the metadata map does not yet exist, it is created with a
-   * CaseInsensitiveKeyCompare comparator.  Null or empty-string values
-   * are stored as valueless tags.
-   */
-  virtual string_map::iterator set_tag(const string& tag, const std::optional<value_t>& value = {},
-                                       const bool overwrite_existing = true);
-
-  /**
    * @brief Parse metadata tags from a comment line.
    *
-   * Recognizes three forms of metadata in comment text:
-   *   - `[date=auxdate]` -- bracketed date/auxiliary-date override
-   *   - `:tag1:tag2:tag3:` -- colon-delimited bare tags (no values)
-   *   - `Key: value` -- a key/value metadata pair (first token ending in `:`)
-   *   - `Key:: expr` -- like `Key:` but the value is an expression that
-   *     is evaluated in the current scope before being stored
+   * In addition to the `:tag:` and `Key:` / `Key::` forms handled by
+   * metadata_t, item_t recognizes a leading `[date]` or `[date=auxdate]`
+   * bracketed override that updates this item's primary and/or auxiliary
+   * date.  Accounts do not have dates and therefore inherit
+   * metadata_t::parse_metadata_tags directly.
    *
    * @param p                  Raw comment text (without the leading `;`).
    * @param scope              Scope for evaluating `Key::` expressions.
@@ -383,13 +331,5 @@ void print_item(std::ostream& out, const item_t& item, const string& prefix = ""
  * followed by the source text, for use in error reporting.
  */
 string item_context(const item_t& item, const string& desc);
-
-/**
- * @brief Serialize metadata tags into a property tree for XML output.
- *
- * Valueless tags are written as `<tag>name</tag>` elements; key/value
- * pairs are written as `<value key="name">...</value>` elements.
- */
-void put_metadata(property_tree::ptree& pt, const item_t::string_map& metadata);
 
 } // namespace ledger
