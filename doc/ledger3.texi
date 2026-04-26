@@ -9517,13 +9517,13 @@ section.
 @node Literals, Variables, Value Types, Value Expressions
 @section Literals
 
-The lexer recognises six kinds of literal, plus the keywords
-@code{true}, @code{false}, and @code{null}.
+The lexer recognizes six kinds of literal plus the keywords
+@code{true} and @code{false}.
 
 A @strong{numeric or amount literal} is whatever @code{amount_t::parse}
-will accept: bare numbers like @samp{42} and @samp{3.14}, commoditised
-amounts like @samp{$10.00}, @samp{€-1@comma{}25}, or @samp{1500 AAPL},
-and locale-flavoured forms with grouping (@samp{1@comma{}000.00}).  The
+will accept: bare numbers like @samp{42} and @samp{3.14}, commoditized
+amounts like @samp{$10.00}, @samp{€-1,25}, or @samp{1500 AAPL},
+and locale-flavored forms with grouping (@samp{1,000.00}).  The
 result has type @code{INTEGER} when the number is a plain integer and
 @code{AMOUNT} otherwise.
 
@@ -9554,12 +9554,11 @@ starting date.  @samp{[2024/01/01]}, @samp{[last month]}, and
 inside the brackets is the same as for @option{--period}; see
 @ref{Period Expressions}.
 
-The bare words @code{true} and @code{false} produce
-@code{BOOLEAN} values.  The keyword @code{null} is also accepted and
-produces the empty @code{VOID} value; this is the only way to write
-the void value directly, and it is mainly useful as the right-hand
-side of an @code{if}/@code{else} branch when one arm should produce
-nothing.
+The bare words @code{true} and @code{false} produce @code{BOOLEAN}
+values; both are reserved tokens.  @code{null} is not a literal but
+a built-in identifier bound to the empty @code{VOID} value, and is
+the usual way to write that value directly when one arm of an
+@code{if}/@code{else} should produce nothing.
 
 @node Variables, Names and Scope, Literals, Value Expressions
 @section Variables
@@ -9654,7 +9653,7 @@ itself, without subaccounts.
 The cost of a posting; the cost of an account, without its
 children.  To compute the market value of a posting, use the
 @code{market} function or its single-letter alias @code{P}
-(@pxref{Functions}).  The unrealised gain is then @samp{P(a) - b}.
+(@pxref{Functions}).  The unrealized gain is then @samp{P(a) - b}.
 
 @item price
 The per-unit price stored in the amount's lot annotation, or
@@ -9689,15 +9688,21 @@ top-level master account.  @samp{Expenses:Food:Lunch} has depth 3.
 The single-letter alias @code{l} is convenient inside format strings.
 
 @item n
-@itemx index
-@itemx count
-The index of a posting, or the count of postings affecting an
-account.  In account scope @code{count} is the count for that account
-alone and @code{N} is the cumulative count including subaccounts.
+The index of a posting (1-indexed) when used in posting scope; the
+count of postings affecting an account itself (excluding
+subaccounts) in account scope.  @code{index} is a posting-only alias
+for the running posting count.
+
+@item count
+@itemx N
+The total count of postings.  Cumulative in both scopes: in posting
+scope it equals the running posting index, and in account scope it
+sums the postings of an account and all its subaccounts.
 
 @item subcount
-In account scope, the number of postings affecting this account
-without considering subaccounts.
+In account scope, the number of postings affecting the account
+itself without considering subaccounts (the same value @code{n}
+returns in account scope).
 
 @item code
 The transaction code, the text inside parentheses between the date
@@ -9780,14 +9785,15 @@ children.
 When the expression engine sees a bare identifier, it looks the name
 up in a chain of nested scopes.  The bottom of the chain is the
 posting (or the account, in a balance report); above the posting is
-its transaction, then the @code{item} base which both share, then the
-report, and finally the session.  Each layer answers for the names it
-knows and otherwise delegates to the layer above.  This is why
-@code{amount} and @code{payee} resolve against the current posting,
-@code{date} can mean either the posting date or the report's notion
-of ``today'' depending on the layer that answers, and functions like
-@code{market} and @code{format_date} are always available regardless
-of what is being iterated.
+the @code{item} base it shares with the transaction, then the report,
+and finally the session.  Each layer answers for the names it knows
+and otherwise delegates to the layer above.  This is why
+@code{amount} and @code{payee} resolve against the current posting
+(both fields are exposed by @code{post_t::lookup}), @code{date} can
+mean either the posting date or the report's notion of ``today''
+depending on the layer that answers, and functions like @code{market}
+and @code{format_date} are always available regardless of what is
+being iterated.
 
 Several short aliases coexist with their long names: @code{a} for
 @code{amount}, @code{d} for @code{date}, @code{p} for @code{payee},
@@ -9810,7 +9816,7 @@ that does not provide the field; for example, posting-level fields
 like @code{amount} are not available inside a @code{check} directive
 on a commodity.
 
-@subsection Debugging expressions and queries
+@subheading Debugging expressions and queries
 
 Three pre-commands take the guesswork out of figuring out what the
 expression engine is doing.
@@ -9945,10 +9951,10 @@ forced promotion.
 Output and formatting helpers include @code{format} (apply a format
 string), @code{format_date}, @code{format_datetime}, @code{justify},
 @code{trim}, @code{truncated}, @code{join}, @code{quoted},
-@code{quoted_rfc}, @code{ansify_if}, @code{print}, and the colour
+@code{quoted_rfc}, @code{ansify_if}, @code{print}, and the color
 predicates @code{black}, @code{blue}, @code{cyan}, @code{green},
 @code{magenta}, @code{red}, @code{white}, @code{yellow},
-@code{bold}, @code{blink}, and @code{underline} which yield a colour
+@code{bold}, @code{blink}, and @code{underline} which yield a color
 name suitable for passing to @code{ansify_if}.
 
 The @code{options} variable provides read access to command-line
@@ -10157,9 +10163,10 @@ The @code{options} variable is a scope that exposes every
 command-line option by its long name with hyphens replaced by
 underscores.  Boolean options yield @code{true} or @code{false};
 options that take a value yield the value as a string.  Reusing the
-journal from @ref{Member Access} above, asking for the value of
-@option{--daily} from inside a format string with @option{-D} on the
-command line yields @samp{true}:
+single-posting journal from the @code{==~} examples above
+(@pxref{Binary Operators}), passing @option{-D} on the command line
+and asking the format string for @code{options.daily} yields
+@samp{true}:
 
 @smallexample @c command:ED3334A,with_input:34221D2
 $ ledger -f doc.dat -D --format "%(options.daily)\n" reg
@@ -10252,7 +10259,7 @@ def lunch_total = x -> x * 1.0825
 
 @code{lunch_total} is available throughout the rest of the journal:
 
-@smallexample @c command:E3B23A4,with_input:E3B23A4
+@smallexample @c command:E3B23A4
 $ ledger -f doc.dat reg Food --format "%(lunch_total(amount))\n"
 @end smallexample
 @smallexample @c output:E3B23A4
@@ -10277,7 +10284,7 @@ argument adds a @code{strftime}-style template.  Given the journal
 
 @noindent the command
 
-@smallexample @c command:0A28767,with_input:0A28767
+@smallexample @c command:0A28767
 $ ledger -f doc.dat reg Food --format "%(format_date(date, '%Y-W%V'))  %(account)\n"
 @end smallexample
 
@@ -10676,7 +10683,7 @@ Assets:Cash C0D3
 @defvarx b
 The cost of a posting.  For account scope, the cost of the account
 itself, without subaccounts.  Pair with @code{P(amount) - cost} to
-get the unrealised gain.
+get the unrealized gain.
 @end defvar
 
 @defvar count
@@ -10862,11 +10869,6 @@ budget} and @command{ledger cleared}):
 Replace all newlines in @var{value} with @code{\n}.
 @end defun
 
-@defun lifo_lots balance
-Return the lots in @var{balance} sorted by acquisition date,
-newest first.  See @code{fifo_lots} for the opposite ordering.
-@end defun
-
 @defun justify value first_width latter_width right_justify colorize
 Right or left justify the string representing @var{value}.  The width
 of the field in the first line is given by @var{first_width}.  For
@@ -10883,6 +10885,11 @@ $ ledger -f expr.dat --format "»%(justify(account, 30, 30, true))«\n" reg
 »                   Assets:Cash«
 »      Expenses:Office Supplies«
 @end smallexample
+@end defun
+
+@defun lifo_lots balance
+Return the lots in @var{balance} sorted by acquisition date,
+newest first.  See @code{fifo_lots} for the opposite ordering.
 @end defun
 
 @defun lot_date posting
@@ -10914,7 +10921,7 @@ given (as a string), the result is forced to that commodity.
 
 @code{market} is the workhorse for building custom revaluation
 expressions.  Pass @code{value_date} rather than @code{date} so that
-the period machinery's date overrides are honoured.
+the period machinery's date overrides are honored.
 @end defun
 
 @defun max value_a value_b
@@ -10966,9 +10973,10 @@ true $
 @end defvar
 
 @defvar parent
-On an account, the parent account in the hierarchy.
-@code{partial_account} is the parent's name with the master prefix
-stripped, useful when building tree-style displays.
+In posting scope, the enclosing transaction.  In account scope, the
+parent account in the hierarchy.  @code{partial_account} is the
+parent's name with the master prefix stripped, useful when building
+tree-style displays.
 @end defvar
 
 @defvar payee
@@ -11141,14 +11149,6 @@ sequence type to feed @code{get_at}.
 Convert @var{value} to a character string.
 @end defun
 
-@defun truncate value
-Truncate @var{value} to its commodity's display precision, dropping
-any sub-precision digits toward zero.  For an amount with display
-precision 2, @samp{truncate($5.555)} yields @samp{$5.55} and
-@samp{rounded($5.555)} yields @samp{$5.56}.  Distinct from
-@code{truncated}, which shortens a string for column-fitting.
-@end defun
-
 @defun tag tag_name
 @defunx meta tag_name
 Return the value of the metadata tag @var{tag_name} from the posting
@@ -11194,6 +11194,14 @@ $ ledger -f expr.dat --format "»%(trim(' 	Trimmed	 '))«\n" reg assets
 @end smallexample
 @end defun
 
+@defun truncate value
+Truncate @var{value} to its commodity's display precision, dropping
+any sub-precision digits toward zero.  For an amount with display
+precision 2, @samp{truncate($5.555)} yields @samp{$5.55} and
+@samp{rounded($5.555)} yields @samp{$5.56}.  Distinct from
+@code{truncated}, which shortens a string for column-fitting.
+@end defun
+
 @defun truncated string total_len account_len
 Truncate @var{string} to @var{total_len} ensuring that each account is at least
 @var{account_len} long.
@@ -11212,11 +11220,6 @@ Remove rounding from an amount.
 Return unrounded version of amount.
 @end defun
 
-@defvar virtual
-True for postings whose account is wrapped in @code{[]} or
-@code{()}; complement of @code{real}.
-@end defvar
-
 @defvar value_date
 The effective date used for valuation when looking up market prices.
 For ordinary postings this is the same as @code{date}/@code{d}, but
@@ -11229,6 +11232,11 @@ Use @code{value_date} (not @code{date}) in any custom market-value
 expression: passing the posting's literal date to @code{market} would
 defeat the pipeline's date override and give prices as of the wrong
 day.
+@end defvar
+
+@defvar virtual
+True for postings whose account is wrapped in @code{[]} or
+@code{()}; complement of @code{real}.
 @end defvar
 
 

@@ -1,0 +1,54 @@
+; Regression test for issue #804 -- value expression documentation.
+;
+; Locks down the semantics of the posting/account-scope variables described
+; in the Value Expressions chapter:
+;
+;   - n          posting-scope: 1-based posting index
+;                account-scope: count of postings affecting this account alone
+;   - count, N   cumulative count (in posting scope, the running posting
+;                index; in account scope, postings of this account plus all
+;                subaccounts)
+;   - subcount   account-scope alias for n (own postings, no subaccounts)
+;   - index      posting-only alias for the running posting count
+;   - parent     posting-scope: enclosing transaction
+;                account-scope: parent account in the hierarchy
+;
+; The doc text in doc/ledger3.texi (Posting/account details) makes these
+; claims and the doc-test harness verifies the in-chapter examples; this
+; test pins down the broader claims for the rest of the test suite.
+
+2024/01/05 * Grocery
+    Expenses:Food                  $50.00
+    Assets:Cash
+
+2024/01/06 * Coffee
+    Expenses:Food:Lunch             $5.00
+    Assets:Cash
+
+2024/01/07 * Gas
+    Expenses:Auto                  $30.00
+    Assets:Cash
+
+; Posting scope: n, index, count, N all return the running posting index.
+test reg --format '%(n) %(index) %(count) %(N) %(account)\n' Expenses
+1 1 1 1 Expenses:Food
+2 2 2 2 Expenses:Food:Lunch
+3 3 3 3 Expenses:Auto
+end test
+
+; Posting scope: parent.payee returns the enclosing transaction's payee.
+test reg --format '%(parent.payee) | %(account)\n' Expenses
+Grocery | Expenses:Food
+Coffee | Expenses:Food:Lunch
+Gas | Expenses:Auto
+end test
+
+; Account scope: count and N are cumulative (Expenses parent sees 3 from
+; its three subaccounts); n and subcount are own-postings only (Expenses
+; parent has 0 of its own).
+test bal --no-total --format '%(account) n=%(n) count=%(count) N=%(N) subcount=%(subcount)\n' Expenses
+Expenses n=0 count=3 N=3 subcount=0
+Expenses:Auto n=1 count=1 N=1 subcount=1
+Expenses:Food n=1 count=2 N=2 subcount=1
+Expenses:Food:Lunch n=1 count=1 N=1 subcount=1
+end test
