@@ -1,0 +1,21 @@
+; Test for issue #3182: commodity names longer than 255 bytes used to
+; produce a misleading "Quoted commodity symbol lacks closing quote"
+; error because the istream parser used a fixed 255-byte buffer.  The
+; buffer has been replaced with a dynamic string, so quoted commodity
+; symbols of arbitrary length now parse correctly.  A long bare symbol
+; (one whose characters are all valid in unquoted form) is also no
+; longer silently truncated at 255 bytes.
+
+2026-04-25 quoted long commodity
+    Assets:Holdings   1 "...................................................................................................................................................................................................................................................................."
+    Assets:Cash      $-2
+
+2026-04-25 bare long commodity
+    Assets:Other      1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    Assets:Cash      $-3
+
+test commodities
+"...................................................................................................................................................................................................................................................................."
+$
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+end test

@@ -404,33 +404,30 @@ bool commodity_t::symbol_needs_quotes(const string& symbol) {
 void commodity_t::parse_symbol(std::istream& in, string& symbol) {
   std::istream::pos_type pos = in.tellg();
 
-  char buf[256];
+  symbol.clear();
   int c = peek_next_nonws(in);
   if (c == '"') {
     in.get();
-    READ_INTO(in, buf, 255, c, c != '"');
+    READ_INTO(in, symbol, c, c != '"');
     if (c == '"')
       in.get();
     else
       throw_(amount_error, _("Quoted commodity symbol lacks closing quote"));
   } else {
-    char* _p = buf;
-    while (_p - buf < 255 && in.good() && !in.eof() && !invalid_chars[c]) {
+    while (in.good() && !in.eof() && !invalid_chars[c]) {
       c = in.get();
       if (c == '\\') {
         c = in.get();
         if (in.eof())
           throw_(amount_error, _("Backslash at end of commodity name"));
       }
-      *_p++ = c;
+      symbol.push_back(static_cast<char>(c));
       c = in.peek();
     }
-    *_p = '\0';
 
-    if (is_reserved_token(buf))
-      buf[0] = '\0';
+    if (is_reserved_token(symbol.c_str()))
+      symbol.clear();
   }
-  symbol = buf;
 
   if (symbol.length() == 0) {
     in.clear();
