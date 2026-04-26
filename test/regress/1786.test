@@ -1,0 +1,51 @@
+; Regression test for issue #1786: Parsing of metadata with multiple semicolons
+; https://github.com/ledger/ledger/issues/1786
+;
+; When a posting comment begins with multiple `;` characters (optionally
+; separated by whitespace), the extra semicolons must be treated as part
+; of the comment prefix -- not glued onto the following tag name.  The
+; related fix for issue #1702 addressed the tag value offset but left
+; the tag name corrupted in these cases:
+;
+;   ;;Key: Value      -> tag was ";Key", now "Key"
+;   ;  ;Key: Value    -> tag was ";Key", now "Key"
+;   ;;;Key: Value     -> tag was ";;Key", now "Key"
+;
+; Bare-tag syntax (`:tag1:tag2:`) must also keep working through the
+; extra semicolons.
+
+2019-04-16 * Metadata with space-separated double semicolon
+    ;  ;Foo: Bar
+    Assets:Test         10.00 EUR
+    Income:Test        -10.00 EUR
+
+2019-04-16 * Metadata with consecutive double semicolons
+    ;;Test: Baz
+    Assets:Test         10.00 EUR
+    Income:Test        -10.00 EUR
+
+2019-04-16 * Metadata with three consecutive semicolons
+    ;;;Triple: Quux
+    Assets:Test         10.00 EUR
+    Income:Test        -10.00 EUR
+
+2019-04-16 * Bare tags behind double semicolons
+    ;;:alpha:beta:
+    Assets:Test         10.00 EUR
+    Income:Test        -10.00 EUR
+
+test tags
+Foo
+Test
+Triple
+alpha
+beta
+end test
+
+test tags --values
+Foo: Bar
+Test: Baz
+Triple: Quux
+alpha
+beta
+end test
