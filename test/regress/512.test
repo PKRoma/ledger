@@ -1,0 +1,54 @@
+; Regression test for issue #512: --lots does not work with commodities conversion
+; https://github.com/ledger/ledger/issues/512
+;
+; With a C directive linking two commodities (e.g. "C BTC 1 = 1,000,000.00 bit"),
+; postings specified in either unit should combine correctly under --lots.
+;
+; Without the fix, the two postings below displayed as separate balance
+; entries --- "1.5 BTC" (unannotated) and "500,000.00 bit {0.01 USD}" ---
+; because in_place_reduce() rescaled the amount from BTC to bit but left
+; the per-unit lot price unchanged (still 10,000 USD/BTC applied to bits).
+; That produced two distinct annotated commodities for the same underlying
+; lot, so balance_t could not combine them.
+;
+; With the fix, in_place_reduce() and in_place_unreduce() adjust the lot
+; price inversely to the amount scaling, preserving total cost.  The two
+; postings now share the same annotation (bit {0.01 USD}) after reduction
+; and combine into 2,000,000 bit, which unreduces at display time to
+; 2.0 BTC {10,000.00 USD} [2018/01/23].
+
+D 1,000.00 USD
+
+C BTC 1 = 1,000,000.00 bit
+
+2018-01-23 Buy BTC
+    Crypto:BTC                             500000.00 bit @@ 5000 USD
+    Exchange
+
+2018-01-23 Buy BTC
+    Crypto:BTC                             1.5 BTC @@ 15000 USD
+    Exchange
+
+test bal --lots
+2.0 BTC {10,000.00 USD} [2018/01/23]  Crypto:BTC
+      -20,000.00 USD  Exchange
+--------------------
+2.0 BTC {10,000.00 USD} [2018/01/23]
+      -20,000.00 USD
+end test
+
+test --base bal --lots
+2,000,000.00 bit {0.01 USD} [2018/01/23]  Crypto:BTC
+      -20,000.00 USD  Exchange
+--------------------
+      -20,000.00 USD
+2,000,000.00 bit {0.01 USD} [2018/01/23]
+end test
+
+test bal
+             2.0 BTC  Crypto:BTC
+      -20,000.00 USD  Exchange
+--------------------
+             2.0 BTC
+      -20,000.00 USD
+end test

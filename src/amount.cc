@@ -1117,6 +1117,13 @@ void amount_t::in_place_unround() {
  * "1m = 60s" are defined, reducing 1.5h yields 5400s.  This is used
  * during parsing so that all time amounts are stored uniformly in the
  * smallest defined unit.
+ *
+ * When the amount has a lot-price annotation (from an @ or @@ cost),
+ * the per-unit price is divided by the same factor that the amount is
+ * multiplied by, so that the total cost remains invariant.  Without
+ * this, a C directive linking two units would produce lots whose
+ * annotations differ from lots acquired directly in the smaller unit,
+ * preventing them from combining in a balance (fixes #512).
  */
 void amount_t::in_place_reduce() {
   if (!quantity)
@@ -1124,15 +1131,22 @@ void amount_t::in_place_reduce() {
 
   int depth = 0;
   commodity_t* original = commodity_;
+  amount_t scale_factor(1L);
+  bool scaled = false;
   while (commodity_ && commodity().smaller()) {
     if (++depth > 100) // safety net: break out of cyclic smaller chains
       break;
-    *this *= commodity().smaller()->number();
+    amount_t step = commodity().smaller()->number();
+    *this *= step;
+    scale_factor *= step;
+    scaled = true;
     commodity_ = commodity().smaller()->commodity_;
   }
   if (original && original != commodity_ && commodity_ && original->has_annotation()) {
-    commodity_ = commodity_pool_t::current_pool->find_or_create(
-        *commodity_, as_annotated_commodity(*original).details);
+    annotation_t details(as_annotated_commodity(*original).details);
+    if (scaled && details.price)
+      *details.price /= scale_factor;
+    commodity_ = commodity_pool_t::current_pool->find_or_create(*commodity_, details);
   }
 }
 
@@ -1143,6 +1157,11 @@ void amount_t::in_place_reduce() {
  * dividing by conversion factors, stopping when the result would
  * drop below 1 in absolute value.  For example, unreducing 90s when
  * "1m = 60s" is defined yields 1.5m (not 0.025h).
+ *
+ * When the amount has a lot-price annotation, the per-unit price is
+ * multiplied by the same factor that the amount is divided by, so
+ * that the total cost remains invariant.  This is the inverse of the
+ * price adjustment in in_place_reduce() (fixes #512).
  */
 void amount_t::in_place_unreduce() {
   if (!quantity)
@@ -1151,15 +1170,18 @@ void amount_t::in_place_unreduce() {
   amount_t tmp = *this;
   commodity_t* comm = commodity_;
   bool shifted = false;
+  amount_t scale_factor(1L);
 
   int depth = 0;
   while (comm && comm->larger()) {
     if (++depth > 100) // safety net: break out of cyclic larger chains
       break;
-    amount_t next_temp = tmp / comm->larger()->number();
+    amount_t step = comm->larger()->number();
+    amount_t next_temp = tmp / step;
     if (next_temp.abs() < amount_t(1L))
       break;
     tmp = next_temp;
+    scale_factor *= step;
     comm = comm->larger()->commodity_;
     shifted = true;
   }
@@ -1167,8 +1189,10 @@ void amount_t::in_place_unreduce() {
   if (shifted) {
     *this = tmp;
     if (commodity_ && commodity_->has_annotation()) {
-      commodity_ = commodity_pool_t::current_pool->find_or_create(
-          *comm, as_annotated_commodity(*commodity_).details);
+      annotation_t details(as_annotated_commodity(*commodity_).details);
+      if (details.price)
+        *details.price *= scale_factor;
+      commodity_ = commodity_pool_t::current_pool->find_or_create(*comm, details);
     } else {
       commodity_ = comm;
     }
