@@ -9527,12 +9527,11 @@ and locale-flavoured forms with grouping (@samp{1@comma{}000.00}).  The
 result has type @code{INTEGER} when the number is a plain integer and
 @code{AMOUNT} otherwise.
 
-A @strong{string literal} is written in single quotes (@code{'hello'})
-or double quotes (@code{"hello"}).  The two forms differ in one
-respect: a double-quoted literal is first offered to the amount
-parser, so @code{"$10.00"} is an @code{AMOUNT}, while @code{'$10.00'}
-is the seven-character @code{STRING} @samp{$10.00}.  Use single quotes
-when you want a string regardless of contents.
+A @strong{string literal} is written in single quotes
+(@code{'hello'}) or double quotes (@code{"hello"}).  Both produce
+@code{STRING} values; if you want an amount value, write the amount
+without quotes (or wrap it in braces, see below).  Use the literal
+that does not collide with any contained quotes.
 
 A @strong{brace-amount literal} like @samp{@{$10.00@}} parses the
 contents as an amount without commodity migration, so the precision
@@ -9811,10 +9810,65 @@ that does not provide the field; for example, posting-level fields
 like @code{amount} are not available inside a @code{check} directive
 on a commodity.
 
-When debugging, the @command{eval} pre-command takes any value
-expression and prints its result, and @command{parse} prints the AST
-the parser produced.  Both are useful for confirming what your
-expression actually means.
+@subsection Debugging expressions and queries
+
+Three pre-commands take the guesswork out of figuring out what the
+expression engine is doing.
+
+The @command{eval} pre-command takes a value expression, evaluates it
+in the report scope, and prints the result.  Use it to test a
+fragment in isolation before pasting it into @option{--limit} or a
+format string:
+
+@smallexample @c command:validate
+$ ledger eval '5 + 3'
+@end smallexample
+
+prints @samp{8}.  Anything that works inside @samp{%(@dots{})} works
+here, including function calls, arithmetic on amounts, and lambdas.
+
+The @command{parse} pre-command (also spelled @command{expr}) does
+not just evaluate the expression -- it also prints the parser's
+input, the source text as the parser saw it, the raw AST, the
+compiled AST, and the calculated value.  This is the right tool when
+you suspect the expression is being read differently from what you
+intended:
+
+@smallexample @c command:validate
+$ ledger parse 'amount > $100'
+@end smallexample
+
+shows the @code{O_GT} node with @code{amount} on the left and the
+@code{$100.00} literal on the right, then evaluates the whole thing
+in the context of a sample posting.  The compiled tree shows
+post-compile substitutions: @code{amount} resolves to a @code{FUNCTION}
+terminal, the constant arms of arithmetic operators are folded, and
+unused branches collapse.  When a complicated expression silently
+gives the wrong answer, the most common cause is an operator binding
+differently from what one would expect, and the parsed tree makes
+that visible at a glance.
+
+The @command{query} pre-command does the same diagnostic dump for the
+shorthand query language that follows a command name.  Bare strings
+become account regexes, @code{@@} introduces a payee match, @code{%}
+introduces a tag match, and Boolean keywords like @code{and},
+@code{or}, and @code{not} compose the parts:
+
+@smallexample @c command:validate
+$ ledger query food
+$ ledger query @@Amazon
+@end smallexample
+
+both print an @samp{Input expression} line that shows how the
+shorthand was rewritten to a value expression.  When a
+@command{ledger bal food and not %tax} is matching the wrong
+postings, @command{ledger query food and not %tax} reveals exactly
+which value expression is being applied.
+
+A common workflow is to build up a query incrementally with
+@command{query} until it picks the right postings, then move it to
+@option{--limit} where the same value expression is consumed
+directly.
 
 @node Functions, Operators, Names and Scope, Value Expressions
 @section Functions
@@ -10042,8 +10096,17 @@ subaccounts) and @code{.amount} (the balance of the named account
 alone).  @code{.note}, @code{.depth}, @code{.parent}, and
 @code{.partial_account} are also available.
 
+@code{account()} reads a balance that is being maintained by the
+journal parser, so it is most useful in @code{assert} or
+@code{check} directives written between transactions, where the
+balance is up to date for everything seen so far.
+
 @smallexample
-$ ledger reg --limit 'account("Assets:Checking").total > $1000'
+2024/01/05 * Pay rent
+    Expenses:Rent       $1500.00
+    Assets:Checking
+
+assert account("Assets:Checking").amount >= -$2000.00
 @end smallexample
 
 The dot also works when the left-hand side is itself a posting or
@@ -10967,8 +11030,11 @@ Convert @var{value} to a character string.
 @end defun
 
 @defun truncate value
-Round @var{value} toward zero.  Distinct from @code{truncated}, which
-shortens a string for display.
+Truncate @var{value} to its commodity's display precision, dropping
+any sub-precision digits toward zero.  For an amount with display
+precision 2, @samp{truncate($5.555)} yields @samp{$5.55} and
+@samp{rounded($5.555)} yields @samp{$5.56}.  Distinct from
+@code{truncated}, which shortens a string for column-fitting.
 @end defun
 
 @defun tag tag_name
