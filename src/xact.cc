@@ -1658,6 +1658,63 @@ void auto_xact_t::extend_xact(xact_base_t& xact, parse_context_t& context) {
   }
 }
 
+/**
+ * @brief Evaluate check_exprs against a single posting, bypassing the
+ *        predicate and posting-generation phases of extend_xact().
+ *
+ * This fast path is used by journal_t::extend_xact() for account-scoped
+ * check directives (see `scoped_to_account`).  The caller has already
+ * verified via index lookup that the posting belongs to the scoped
+ * account, so predicate evaluation is unnecessary.  Because account
+ * directives cannot carry template postings or deferred notes, only
+ * check expressions need to run; the logic mirrors the check_exprs
+ * branch of the main extend_xact() loop.
+ */
+void auto_xact_t::apply_checks_to_post(post_t& initial_post, parse_context_t& context) {
+  if (!enabled || !check_exprs)
+    return;
+
+  try {
+    bind_scope_t bound_scope(*scope_t::default_scope, initial_post);
+
+    // Temporarily disable use_aux_date during check evaluation so that
+    // date() returns the primary date and expressions like
+    // "aux_date != date" behave correctly; mirrors extend_xact() above
+    // (fixes #2945).
+    bool saved = item_t::use_aux_date;
+    item_t::use_aux_date = false;
+    struct restore_guard {
+      bool& flag;
+      bool val;
+      ~restore_guard() { flag = val; }
+    } guard{item_t::use_aux_date, saved};
+
+    for (expr_t::check_expr_pair& pair : *check_exprs) {
+      if (pair.second == expr_t::EXPR_GENERAL) {
+        pair.first.calc(bound_scope);
+      } else if (!pair.first.calc(bound_scope).to_boolean()) {
+        const xact_base_t* parent_xact = initial_post.xact;
+        if (pair.second == expr_t::EXPR_ASSERTION)
+          throw_(parse_error, _f("Transaction assertion failed: %1%") % pair.first);
+        else
+          warning_func((parent_xact && parent_xact->pos
+                            ? file_context(parent_xact->pos->pathname, parent_xact->pos->beg_line)
+                            : context.location()) +
+                       " " + (_f("Transaction check failed: %1%") % pair.first).str() +
+                       (pos ? "\n  " + (_f("(check expression at \"%1%\", line %2%)") %
+                                        pos->pathname.string() % pos->beg_line)
+                                           .str()
+                            : ""));
+      }
+    }
+  } catch (const std::exception&) {
+    add_error_context(item_context(*this, _("While applying automated transaction")));
+    if (initial_post.xact)
+      add_error_context(item_context(*initial_post.xact, _("While extending transaction")));
+    throw;
+  }
+}
+
 /*----------------------------------------------------------------------*/
 /*  Utility Functions                                                   */
 /*----------------------------------------------------------------------*/
