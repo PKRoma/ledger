@@ -641,21 +641,23 @@ inline int peek_next_nonws(std::istream& in) {
   return c;
 }
 
-/// Read characters from stream @p str into buffer @p targ (max @p size bytes),
-/// storing each character in @p var, continuing while @p cond is true.
-/// Handles backslash escape sequences (\b, \f, \n, \r, \t, \v).
-/// Stops at newline or end-of-stream.
-#define READ_INTO(str, targ, size, var, cond)                                                      \
+/// Read characters from stream @p str into string @p targ, appending each
+/// character to @p targ and storing the byte just consumed in @p var,
+/// continuing while @p cond is true.  The string grows as needed, so the
+/// caller does not need to anticipate the input length.  Handles backslash
+/// escape sequences (\b, \f, \n, \r, \t, \v).  Stops at newline or
+/// end-of-stream; the terminating character is left in the stream so the
+/// caller can inspect it via @p var.
+#define READ_INTO(str, targ, var, cond)                                                            \
   {                                                                                                \
-    char* _p = targ;                                                                               \
     (var) = (str).peek();                                                                          \
-    while ((str).good() && !(str).eof() && (var) != '\n' && (cond) && _p - (targ) < (size)) {      \
+    while ((str).good() && !(str).eof() && (var) != '\n' && (cond)) {                              \
       (var) = (str).get();                                                                         \
       if ((str).eof())                                                                             \
         break;                                                                                     \
       if ((var) == '\\') {                                                                         \
         (var) = (str).get();                                                                       \
-        if (in.eof())                                                                              \
+        if ((str).eof())                                                                           \
           break;                                                                                   \
         switch (var) {                                                                             \
         case 'b':                                                                                  \
@@ -680,27 +682,25 @@ inline int peek_next_nonws(std::istream& in) {
           break;                                                                                   \
         }                                                                                          \
       }                                                                                            \
-      *_p++ = var;                                                                                 \
+      (targ).push_back(static_cast<char>(var));                                                    \
       (var) = (str).peek();                                                                        \
     }                                                                                              \
-    *_p = '\0';                                                                                    \
   }
 
 /// Like READ_INTO but also increments a column index @p idx for each
 /// character consumed, including both bytes of an escape sequence.
 /// Used by the parser to track column positions for error reporting.
-#define READ_INTO_(str, targ, size, var, idx, cond)                                                \
+#define READ_INTO_(str, targ, var, idx, cond)                                                      \
   {                                                                                                \
-    char* _p = targ;                                                                               \
     (var) = (str).peek();                                                                          \
-    while ((str).good() && !(str).eof() && (var) != '\n' && (cond) && _p - (targ) < (size)) {      \
+    while ((str).good() && !(str).eof() && (var) != '\n' && (cond)) {                              \
       (var) = (str).get();                                                                         \
       if ((str).eof())                                                                             \
         break;                                                                                     \
       (idx)++;                                                                                     \
       if ((var) == '\\') {                                                                         \
         (var) = (str).get();                                                                       \
-        if (in.eof())                                                                              \
+        if ((str).eof())                                                                           \
           break;                                                                                   \
         switch (var) {                                                                             \
         case 'b':                                                                                  \
@@ -726,10 +726,9 @@ inline int peek_next_nonws(std::istream& in) {
         }                                                                                          \
         (idx)++;                                                                                   \
       }                                                                                            \
-      *_p++ = var;                                                                                 \
+      (targ).push_back(static_cast<char>(var));                                                    \
       (var) = (str).peek();                                                                        \
     }                                                                                              \
-    *_p = '\0';                                                                                    \
   }
 
 /// Convert a SHA-1 digest to a hexadecimal string.

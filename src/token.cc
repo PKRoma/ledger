@@ -74,12 +74,12 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       c == 't') {
     length = 0;
 
-    char buf[6];
-    READ_INTO_(in, buf, 5, c, length, std::isalpha(static_cast<unsigned char>(c)));
+    string buf;
+    READ_INTO_(in, buf, c, length, std::isalpha(static_cast<unsigned char>(c)));
 
     switch (buf[0]) {
     case 'a':
-      if (std::strcmp(buf, "and") == 0) {
+      if (buf == "and") {
         symbol[0] = '&';
         symbol[1] = '\0';
         kind = KW_AND;
@@ -88,7 +88,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 'd':
-      if (std::strcmp(buf, "div") == 0) {
+      if (buf == "div") {
         symbol[0] = '/';
         symbol[1] = '\0';
         kind = KW_DIV;
@@ -97,7 +97,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 'e':
-      if (std::strcmp(buf, "else") == 0) {
+      if (buf == "else") {
         std::strcpy(symbol, "else");
         kind = KW_ELSE;
         return 1;
@@ -105,7 +105,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 'f':
-      if (std::strcmp(buf, "false") == 0) {
+      if (buf == "false") {
         std::strcpy(symbol, "false");
         kind = VALUE;
         value = false;
@@ -114,7 +114,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 'i':
-      if (std::strcmp(buf, "if") == 0) {
+      if (buf == "if") {
         symbol[0] = 'i';
         symbol[1] = 'f';
         symbol[2] = '\0';
@@ -124,7 +124,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 'o':
-      if (std::strcmp(buf, "or") == 0) {
+      if (buf == "or") {
         symbol[0] = '|';
         symbol[1] = '\0';
         kind = KW_OR;
@@ -133,7 +133,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 'n':
-      if (std::strcmp(buf, "not") == 0) {
+      if (buf == "not") {
         symbol[0] = '!';
         symbol[1] = '\0';
         kind = EXCLAM;
@@ -142,7 +142,7 @@ int expr_t::token_t::parse_reserved_word(std::istream& in) {
       break;
 
     case 't':
-      if (std::strcmp(buf, "true") == 0) {
+      if (buf == "true") {
         std::strcpy(symbol, "true");
         kind = VALUE;
         value = true;
@@ -165,8 +165,8 @@ void expr_t::token_t::parse_ident(std::istream& in) {
   length = 0;
 
   int c;
-  char buf[256];
-  READ_INTO_(in, buf, 255, c, length, std::isalpha(static_cast<unsigned char>(c)) || c == '_');
+  string buf;
+  READ_INTO_(in, buf, c, length, std::isalpha(static_cast<unsigned char>(c)) || c == '_');
 
   value.set_string(buf);
 }
@@ -234,8 +234,8 @@ void expr_t::token_t::next(std::istream& in, const parse_flags_t& pflags) {
   case '[': {
     in.get();
 
-    char buf[256];
-    READ_INTO_(in, buf, 255, c, length, c != ']');
+    string buf;
+    READ_INTO_(in, buf, c, length, c != ']');
     if (c != ']')
       expected(']', c);
 
@@ -255,8 +255,8 @@ void expr_t::token_t::next(std::istream& in, const parse_flags_t& pflags) {
   case '\'': {
     char delim;
     in.get(delim);
-    char buf[4096];
-    READ_INTO_(in, buf, 4095, c, length, c != delim);
+    string buf;
+    READ_INTO_(in, buf, c, length, c != delim);
     if (c != delim)
       expected(delim, c);
     in.get();
@@ -303,8 +303,8 @@ void expr_t::token_t::next(std::istream& in, const parse_flags_t& pflags) {
 
     char delim;
     in.get(delim);
-    char buf[4096];
-    READ_INTO_(in, buf, 4095, c, length, c != delim);
+    string buf;
+    READ_INTO_(in, buf, c, length, c != delim);
     if (c != delim)
       expected(delim, c);
     in.get();

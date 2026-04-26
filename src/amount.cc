@@ -1471,56 +1471,35 @@ namespace {
  *                    excluding any commodity symbol.
  */
 void parse_quantity(std::istream& in, string& value) {
-  char buf[256];
+  value.clear();
   int c = peek_next_nonws(in);
-  int max = 255;
-  char* p = buf;
   if (c == '-') {
-    *p++ = c;
-    max--;
+    value.push_back(static_cast<char>(c));
     in.get();
   } else if (c == '+') {
     in.get(); // consume unary '+'; value is positive by default
   }
-  READ_INTO(in, p, max, c,
+  READ_INTO(in, value, c,
             std::isdigit(static_cast<unsigned char>(c)) || c == '.' || c == ',' || c == '\'');
 
-  string::size_type len = std::strlen(buf);
-  while (len > 0 && !std::isdigit(static_cast<unsigned char>(buf[len - 1]))) {
-    buf[--len] = '\0';
+  while (!value.empty() && !std::isdigit(static_cast<unsigned char>(value.back()))) {
+    value.pop_back();
     in.unget();
   }
 
-  // If the next character in the stream is a period that was just stripped,
-  // and it was preceded by a digit, re-read it as a trailing decimal mark.
-  // A trailing decimal point with no following digits indicates zero decimal
-  // places, which is used by hledger to disambiguate decimal marks from
-  // digit group marks (e.g. "1,234." means 1234 with period as decimal mark).
-  //
-  // Note: we only re-read periods, not commas, because commas serve as
-  // argument separators in value expressions and re-reading them would break
-  // expression parsing (e.g. "justify(..., 12, 2, ...)").
-  if (len > 0 && std::isdigit(static_cast<unsigned char>(buf[len - 1]))) {
-    c = in.peek();
-    if (c == '.') {
-      int next = EOF;
-      in.get();
-      if (!in.eof())
-        next = in.peek();
-      // Only keep the trailing period if it is NOT followed by a digit
-      // (if followed by a digit, it was not actually stripped -- this guards
-      // against double-reading).
-      if (next == EOF || !std::isdigit(static_cast<unsigned char>(next))) {
-        buf[len++] = '.';
-        buf[len] = '\0';
-      } else {
-        // Put it back; it wasn't a trailing mark
-        in.unget();
-      }
-    }
+  // hledger uses a trailing decimal point with no following digits to
+  // disambiguate the decimal mark from the digit group mark (e.g. "1,234."
+  // means 1234 with `.` as decimal mark).  If the strip loop just ungot
+  // a trailing `.`, restore it: the read consumed every digit/`.`/`,`/`'`
+  // greedily, so anything still in the stream after the stripped `.` is by
+  // definition non-numeric and the `.` was the true trailing mark.  Commas
+  // are not re-read because they serve as argument separators in value
+  // expressions (e.g. "justify(..., 12, 2, ...)").
+  if (!value.empty() && std::isdigit(static_cast<unsigned char>(value.back())) &&
+      in.peek() == '.') {
+    in.get();
+    value.push_back('.');
   }
-
-  value = buf;
 }
 } // namespace
 

@@ -150,7 +150,7 @@ void annotation_t::parse(std::istream& in) {
     if (pos == std::istream::pos_type(std::streamoff(-1)))
       return;
 
-    char buf[256];
+    string buf;
     int c = peek_next_nonws(in);
     if (c == '{') {
       if (price)
@@ -169,7 +169,7 @@ void annotation_t::parse(std::istream& in) {
         add_flags(ANNOTATION_PRICE_FIXATED);
       }
 
-      READ_INTO(in, buf, 255, c, c != '}');
+      READ_INTO(in, buf, c, c != '}');
       if (c == '}') {
         in.get();
         if (has_flags(ANNOTATION_PRICE_NOT_PER_UNIT)) {
@@ -193,7 +193,7 @@ void annotation_t::parse(std::istream& in) {
         throw_(amount_error, _("Commodity specifies more than one date"));
 
       in.get();
-      READ_INTO(in, buf, 255, c, c != ']');
+      READ_INTO(in, buf, c, c != ']');
       if (c == ']')
         in.get();
       else
@@ -216,10 +216,9 @@ void annotation_t::parse(std::istream& in) {
         // Read expression with balanced parentheses to handle nested parens
         // like "market($10, date, t)" inside lot value expressions
         {
-          char* _p = buf;
           int depth = 0;
           c = in.peek();
-          while (in.good() && !in.eof() && c != '\n' && _p - buf < 255) {
+          while (in.good() && !in.eof() && c != '\n') {
             if (c == ')' && depth == 0)
               break;
             c = in.get();
@@ -229,10 +228,9 @@ void annotation_t::parse(std::istream& in) {
               depth++;
             else if (c == ')')
               depth--;
-            *_p++ = c;
+            buf.push_back(static_cast<char>(c));
             c = in.peek();
           }
-          *_p = '\0';
         }
         if (c == ')') {
           in.get();
@@ -250,7 +248,7 @@ void annotation_t::parse(std::istream& in) {
         if (tag)
           throw_(amount_error, _("Commodity specifies more than one tag"));
 
-        READ_INTO(in, buf, 255, c, c != ')');
+        READ_INTO(in, buf, c, c != ')');
         if (c == ')')
           in.get();
         else
