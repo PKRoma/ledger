@@ -61,7 +61,7 @@
 
 #include <limits>
 
-#include "item.h"
+#include "metadata.h"
 #include "scope.h"
 #include "types.h"
 
@@ -89,7 +89,7 @@ using deferred_posts_map_t = std::map<string, posts_list>;
  * as the evaluation context, giving expressions access to the account's
  * name, depth, totals, and statistics through the lookup() dispatch table.
  */
-class account_t : public flags::supports_flags<>, public scope_t {
+class account_t : public flags::supports_flags<>, public metadata_t, public scope_t {
 #define ACCOUNT_NORMAL 0x00 ///< No special flags; an ordinary user-defined account.
 #define ACCOUNT_KNOWN                                                                              \
   0x01 ///< Account was declared with the `account` directive (for --strict/--pedantic validation).
@@ -109,17 +109,11 @@ public:
   std::optional<expr_t>
       value_expr; ///< Custom valuation expression overriding commodity-level valuation.
 
-  /// Structured metadata tags parsed from `;`-prefixed comment lines that
-  /// follow an `account` directive.  Shares item_t's case-insensitive
-  /// string_map type so account tags interoperate with the same tag/meta
-  /// expressions already used for transactions and postings (issue #1681).
-  optional<item_t::string_map> metadata;
-
   mutable string _fullname; ///< Cached colon-joined full name, computed lazily by fullname().
 
   account_t(account_t* _parent = nullptr, const string& _name = "",
             const optional<string>& _note = none)
-      : supports_flags<>(), scope_t(), parent(_parent), name(_name), note(_note),
+      : supports_flags<>(), metadata_t(), scope_t(), parent(_parent), name(_name), note(_note),
         depth(static_cast<unsigned short>(parent ? parent->depth + 1 : 0)) {
     if (parent && parent->depth == std::numeric_limits<unsigned short>::max())
       throw std::runtime_error("Account hierarchy too deep");
@@ -127,10 +121,11 @@ public:
   }
   // Note: copy is intentionally shallow — posts and deferred_posts are
   // NOT copied. The copy shares the same parent and children map but
-  // has an independent (empty) posting history.
+  // has an independent (empty) posting history.  Metadata is copied via
+  // the metadata_t copy constructor.
   account_t(const account_t& other)
-      : supports_flags<>(other.flags()), scope_t(), parent(other.parent), name(other.name),
-        note(other.note), depth(other.depth), accounts(other.accounts), metadata(other.metadata) {
+      : supports_flags<>(other.flags()), metadata_t(other), scope_t(), parent(other.parent),
+        name(other.name), note(other.note), depth(other.depth), accounts(other.accounts) {
     TRACE_CTOR(account_t, "copy");
   }
   account_t& operator=(const account_t&) = default;
@@ -238,57 +233,33 @@ public:
   posts_list::iterator posts_end() { return posts.end(); }
 
   /**
-   * @brief Test whether a metadata tag is set on this account.
-   * @param tag      Tag name to look up (case-insensitive).
-   * @param inherit  If true, also search ancestor accounts.
+   * @brief Tag lookup with parent-account inheritance.
+   *
+   * Overrides metadata_t::has_tag / metadata_t::get_tag so that, when
+   * the tag is not present on this account and @p inherit is true, the
+   * search walks up the parent chain.  The walk stops one level above
+   * the root (an account whose grandparent is null is the master
+   * account, which never carries directive-supplied metadata).
    */
-  bool has_tag(const string& tag, bool inherit = true) const;
-
-  /**
-   * @brief Test whether any tag matching a regex pattern exists on this account.
-   * @param tag_mask    Regex to match against tag names.
-   * @param value_mask  Optional regex to additionally match the tag's value.
-   * @param inherit     If true, also search ancestor accounts.
-   */
+  bool has_tag(const string& tag, bool inherit = true) const override;
   bool has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask = {},
-               bool inherit = true) const;
+               bool inherit = true) const override;
 
-  /**
-   * @brief Retrieve the value of a metadata tag.
-   * @param tag      Tag name to look up (case-insensitive).
-   * @param inherit  If true, and the tag is not set here, search ancestor accounts.
-   * @return The tag's value, or nullopt if the tag is not found.
-   */
-  std::optional<value_t> get_tag(const string& tag, bool inherit = true) const;
-
-  /**
-   * @brief Retrieve the first tag value matching a regex pattern.
-   * @param tag_mask    Regex to match against tag names.
-   * @param value_mask  Optional regex to additionally match the tag's value.
-   * @param inherit     If true, also search ancestor accounts.
-   */
+  std::optional<value_t> get_tag(const string& tag, bool inherit = true) const override;
   std::optional<value_t> get_tag(const mask_t& tag_mask,
                                  const std::optional<mask_t>& value_mask = {},
-                                 bool inherit = true) const;
+                                 bool inherit = true) const override;
 
   /**
-   * @brief Set or overwrite a metadata tag on this account, creating the map if needed.
-   * @param tag                Tag name (case-insensitive key).
-   * @param value              Optional value to associate with the tag.
-   * @param overwrite_existing If false, an existing tag is left untouched.
-   */
-  item_t::string_map::iterator set_tag(const string& tag, const std::optional<value_t>& value = {},
-                                       bool overwrite_existing = true);
-
-  /**
-   * @brief Parse metadata tags from a comment line.
+   * @brief Parse `:tag:` and `Key:` metadata from an account-directive comment.
    *
-   * Recognizes the same `:tag1:tag2:` and `Key: value` / `Key:: expr`
-   * syntaxes that `item_t::parse_tags` handles, but without the
-   * bracketed-date support since accounts are not dated.  The scope is
-   * bound through this account when evaluating `Key:: expr` forms.
+   * Accounts have no dates, so this is a thin wrapper around
+   * metadata_t::parse_metadata_tags binding @c *this as the
+   * `Key:: expr` evaluation target.
    */
-  void parse_tags(const char* p, scope_t& scope, bool overwrite_existing = true);
+  void parse_tags(const char* p, scope_t& scope, bool overwrite_existing = true) {
+    parse_metadata_tags(p, scope, *this, overwrite_existing);
+  }
 
   /**
    * @brief Dispatch table for expression function lookups.
