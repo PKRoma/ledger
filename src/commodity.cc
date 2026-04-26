@@ -136,6 +136,21 @@ std::optional<price_point_t> commodity_t::find_price_from_expr(expr_t& expr,
     result = as_expr(result)->call(call_args, *scope_t::default_scope);
   }
 
+  // A value expression may evaluate to a multi-commodity balance -- a "basket"
+  // of different currencies (issue #1101).  Reprice each component to the
+  // requested target commodity (or the pool default when none is given) so
+  // the basket collapses to a single-commodity amount suitable for a
+  // price_point_t.
+  if (result.is_balance()) {
+    const commodity_t* target = commodity;
+    if (!target && pool().default_commodity)
+      target = &*pool().default_commodity;
+    if (target) {
+      if (auto repriced = result.as_balance().value(moment, target))
+        result = *repriced;
+    }
+  }
+
   return price_point_t(moment, result.to_amount());
 }
 

@@ -1,0 +1,39 @@
+; Regression test for issue #1101: parenthesized price expressions.
+;
+; A price directive may enclose its amount in parentheses to request
+; expression evaluation.  When the expression yields a single-commodity
+; amount it is stored as an ordinary price; when it yields a
+; multi-commodity balance ("basket"), the balance becomes the
+; commodity's value expression so that later valuations can reprice
+; the basket into any requested target commodity.
+
+P 2015-01-01 A  (EUR 0.50 + EUR 0.50)
+P 2015-01-01 B  (EUR 1.00)
+P 2015-01-01 C  (100 * EUR 0.01)
+P 2015-01-01 bicur (EUR 0.45 + USD 0.55)
+P 2015-01-01 EUR USD 1.10
+
+2015/01/01 Plain price tests
+    Assets:A         1 A
+    Assets:B         1 B
+    Assets:C         1 C
+    Equity
+
+2015/01/01 Basket test
+    Assets:Basket    1 bicur
+    Equity
+
+test prices
+2015/01/01 A            EUR 1.00
+2015/01/01 B            EUR 1.00
+2015/01/01 C            EUR 1.00
+2015/01/01 EUR          USD 1.10
+end test
+
+test bal -X USD Assets:Basket
+            USD 1.04  Assets:Basket
+end test
+
+test bal -X EUR Assets:Basket
+            EUR 0.95  Assets:Basket
+end test
