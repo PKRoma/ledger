@@ -2357,6 +2357,30 @@ The @code{default} directive specifies that this account should be
 used as the ``balancing account'' for any future transactions that
 contain only a single posting.
 
+The @code{account} sub-directive declares a child account under the
+enclosing account, so the full colon-separated path need not be
+repeated for every descendant.  Nested @code{account} sub-directives
+can themselves contain further sub-directives (including more nested
+accounts); indentation determines nesting, so sub-directives that
+sit at the same indentation as a nested @code{account} keyword
+continue to attach to the enclosing account.
+
+@smallexample @c input:validate
+account Income
+    note Top-level income category
+    account Salary
+        note Regular monthly salary
+        alias salary
+    account Apps
+        account Android
+        account iPhone
+    account Rent
+@end smallexample
+
+The example above declares @samp{Income}, @samp{Income:Salary},
+@samp{Income:Apps}, @samp{Income:Apps:Android},
+@samp{Income:Apps:iPhone}, and @samp{Income:Rent}.
+
 @item apply account
 @findex apply account
 @c instance_t::master_account_directive
