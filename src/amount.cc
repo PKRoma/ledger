@@ -1887,6 +1887,17 @@ void amount_t::parse_conversion(const string& larger_str, const string& smaller_
   (void)larger.parse(larger_str, PARSE_NO_REDUCE);
   (void)smaller.parse(smaller_str, PARSE_NO_REDUCE);
 
+  // Normalize so the stored smaller/larger links represent a per-unit
+  // conversion factor (issue #1793).  For "C 100 apple = 48 kcal" the
+  // user means 1 apple = 0.48 kcal, not 1 apple = 48 kcal; without this
+  // step in_place_reduce() would multiply 225 apple by 48 instead of by
+  // 0.48.  For the builtin time directives ("C 1.00h = 60m") larger's
+  // number is already 1 so this is a no-op.
+  if (!larger.number().is_realzero()) {
+    smaller /= larger.number();
+    larger /= larger.number();
+  }
+
   larger *= smaller.number();
 
   // Detect cycles before setting the smaller/larger links (bug #1065).

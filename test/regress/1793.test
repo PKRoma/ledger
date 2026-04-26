@@ -1,0 +1,46 @@
+; Regression test for issue #1793: Unexpected balance report when tracking
+; food calories (any commodity equivalence where the "larger" side has a
+; quantity != 1).
+; https://github.com/ledger/ledger/issues/1793
+;
+; "C 100 apple = 48 kcal" means 100 apples equal 48 kcal, i.e. 1 apple =
+; 0.48 kcal, so 225 apples reduce to 108 kcal.  Before the fix the parser
+; dropped the 100 on the left and treated the directive as "1 apple = 48
+; kcal", so the reduced balance was 100x too large (10800 kcal instead of
+; 108).  The fix normalizes the larger amount to a per-unit rate inside
+; amount_t::parse_conversion before setting the smaller/larger links.
+
+commodity apple
+
+C 100 apple = 48 kcal
+
+2019-05-19 Food
+    Food:Fruits  225 apple
+    Source:Pantry
+
+; With --base the reduce chain is preserved so we see the underlying kcal
+; amount.  225 apple * 0.48 kcal/apple = 108 kcal (not 10800).
+test bal --base
+            108 kcal  Food:Fruits
+           -108 kcal  Source:Pantry
+--------------------
+                   0
+end test
+
+; Default balance output preserves the original commodity since 225 apple
+; unreduces cleanly.
+test bal
+           225 apple  Food:Fruits
+          -225 apple  Source:Pantry
+--------------------
+                   0
+end test
+
+; -X conversion via the C directive should use the per-unit rate too:
+; 225 apple * 0.48 kcal/apple = 108 kcal.
+test bal -X kcal
+            108 kcal  Food:Fruits
+           -108 kcal  Source:Pantry
+--------------------
+                   0
+end test
