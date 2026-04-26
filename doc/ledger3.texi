@@ -9820,12 +9820,15 @@ in the report scope, and prints the result.  Use it to test a
 fragment in isolation before pasting it into @option{--limit} or a
 format string:
 
-@smallexample @c command:validate
+@smallexample @c command:654660B
 $ ledger eval '5 + 3'
 @end smallexample
+@smallexample @c output:654660B
+8
+@end smallexample
 
-prints @samp{8}.  Anything that works inside @samp{%(@dots{})} works
-here, including function calls, arithmetic on amounts, and lambdas.
+Anything that works inside @samp{%(@dots{})} works here, including
+function calls, arithmetic on amounts, and lambdas.
 
 The @command{parse} pre-command (also spelled @command{expr}) does
 not just evaluate the expression -- it also prints the parser's
@@ -10051,13 +10054,31 @@ participate in the match are represented as empty strings.
 
 For example, @samp{account ==~ /Expenses.*/} returns the entire
 matched substring (a string), while @samp{account ==~ /(.+):(.+)/}
-returns a three-element sequence: the full match followed by the text
-before and after the last colon.  Individual elements of the sequence
-can be pulled out with @code{get_at}:
+returns a three-element sequence: the full match followed by the
+text before and after the last colon.  Given the journal
 
-@smallexample
-$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 0))\n'   @c whole match
-$ ledger reg --format '%(get_at(account ==~ /(.+):(.+)/, 1))\n'   @c first group
+@smallexample @c input:34221D2
+2024/01/05 * Test
+    Expenses:Food                   $50.00
+    Assets:Cash
+@end smallexample
+
+@noindent the whole match is at index 0:
+
+@smallexample @c command:34221D2
+$ ledger -f doc.dat reg Expenses --format "%(get_at(account ==~ /(.+):(.+)/, 0))\n"
+@end smallexample
+@smallexample @c output:34221D2
+Expenses:Food
+@end smallexample
+
+@noindent and the first capture group is at index 1:
+
+@smallexample @c command:6DD5082,with_input:34221D2
+$ ledger -f doc.dat reg Expenses --format "%(get_at(account ==~ /(.+):(.+)/, 1))\n"
+@end smallexample
+@smallexample @c output:6DD5082
+Expenses
 @end smallexample
 
 The @code{==~} operator is also usable in boolean contexts such as
@@ -10101,12 +10122,29 @@ journal parser, so it is most useful in @code{assert} or
 @code{check} directives written between transactions, where the
 balance is up to date for everything seen so far.
 
-@smallexample
+Given the journal
+
+@smallexample @c input:DCD5303
 2024/01/05 * Pay rent
     Expenses:Rent       $1500.00
     Assets:Checking
 
 assert account("Assets:Checking").amount >= -$2000.00
+
+2024/02/01 * Salary
+    Assets:Checking      $3000.00
+    Income:Salary
+@end smallexample
+
+@noindent the assertion holds (the running checking balance is
+@samp{-$1500.00}, well above the @samp{-$2000.00} floor), so the
+journal parses cleanly:
+
+@smallexample @c command:DCD5303
+$ ledger -f doc.dat bal Checking
+@end smallexample
+@smallexample @c output:DCD5303
+            $1500.00  Assets:Checking
 @end smallexample
 
 The dot also works when the left-hand side is itself a posting or
@@ -10118,12 +10156,22 @@ strings.
 The @code{options} variable is a scope that exposes every
 command-line option by its long name with hyphens replaced by
 underscores.  Boolean options yield @code{true} or @code{false};
-options that take a value yield the value as a string.  This is the
-hook that built-in formats use to vary their output by option:
+options that take a value yield the value as a string.  Reusing the
+journal from @ref{Member Access} above, asking for the value of
+@option{--daily} from inside a format string with @option{-D} on the
+command line yields @samp{true}:
 
-@smallexample
-%(options.color ? ansify_if(payee, blue) : payee)
+@smallexample @c command:ED3334A,with_input:34221D2
+$ ledger -f doc.dat -D --format "%(options.daily)\n" reg
 @end smallexample
+@smallexample @c output:ED3334A
+true
+true
+@end smallexample
+
+This is the hook that built-in formats use to vary their output by
+option, as in
+@samp{%(options.color ? ansify_if(payee, blue) : payee)}.
 
 When a name is dotted that the engine cannot resolve, you get
 @samp{Left operand does not evaluate to an object}.
@@ -10134,13 +10182,39 @@ When a name is dotted that the engine cannot resolve, you get
 A semicolon separates two expressions and discards the first.
 @samp{a; b} evaluates @code{a} for its side effects and then yields
 @code{b}.  An assignment uses @code{=} and binds a name to a value in
-the local scope of the current expression:
+the local scope of the current expression.  The expression
+@code{biggest = max(amount, biggest); biggest} is the canonical
+running-maximum: given the journal
 
-@smallexample
-biggest = max(amount, biggest); biggest
+@smallexample @c input:66E719F
+2024/01/05 * Grocery
+    Expenses:Food                  $50.00
+    Assets:Checking
+
+2024/01/10 * Coffee
+    Expenses:Food                   $5.00
+    Assets:Checking
+
+2024/01/15 * Big purchase
+    Expenses:Electronics         $1500.00
+    Assets:Checking
 @end smallexample
 
-The first time the expression is evaluated, the unresolved
+@noindent the command
+
+@smallexample @c command:66E719F
+$ ledger -f doc.dat reg Expenses --format "%(biggest = max(amount, biggest); biggest)\n"
+@end smallexample
+
+@noindent prints
+
+@smallexample @c output:66E719F
+$50.00
+$50.00
+$1500.00
+@end smallexample
+
+The first time the expression is evaluated the unresolved
 @code{biggest} on the right of @code{max} reads as the empty
 @code{VOID}; @code{max} treats that as ``no value'' and returns
 @code{amount}; the assignment stores it.  On the second evaluation
@@ -10157,24 +10231,62 @@ The arrow @code{->} introduces a lambda.  The left-hand side is a
 parameter list (a single name, or a comma-separated list in
 parentheses) and the right-hand side is the body:
 
-@smallexample
-square = x -> x * x; square(5)
+@smallexample @c command:9130B7B
+$ ledger eval 'square = x -> x * x; square(5)'
+@end smallexample
+@smallexample @c output:9130B7B
+25
 @end smallexample
 
 Lambdas combine with assignment to give you function definitions, and
-the @code{def} or @code{define} keyword in the journal does the same:
+the @code{def} or @code{define} keyword in the journal does the same.
+Given the journal
 
-@smallexample
+@smallexample @c input:E3B23A4
 def lunch_total = x -> x * 1.0825
+
+2024/01/05 * Lunch
+    Expenses:Food                  $50.00
+    Assets:Cash
 @end smallexample
 
-makes @code{lunch_total} available throughout the journal afterward.
+@code{lunch_total} is available throughout the rest of the journal:
+
+@smallexample @c command:E3B23A4,with_input:E3B23A4
+$ ledger -f doc.dat reg Food --format "%(lunch_total(amount))\n"
+@end smallexample
+@smallexample @c output:E3B23A4
+$54.12
+@end smallexample
 
 Function calls use ordinary parentheses, and a function that takes no
 arguments must still be called with @code{()} when you want the call
 rather than the function value.  @samp{format_date(date)} renders the
-posting's date with the default format; @samp{format_date(date,
-'%Y-W%V')} adds an ISO week number.
+posting's date with the default format; the same call with a second
+argument adds a @code{strftime}-style template.  Given the journal
+
+@smallexample @c input:0A28767
+2024/01/05 * Grocery
+    Expenses:Food                  $50.00
+    Assets:Checking
+
+2024/01/10 * Coffee
+    Expenses:Food                   $5.00
+    Assets:Checking
+@end smallexample
+
+@noindent the command
+
+@smallexample @c command:0A28767,with_input:0A28767
+$ ledger -f doc.dat reg Food --format "%(format_date(date, '%Y-W%V'))  %(account)\n"
+@end smallexample
+
+@noindent prints
+
+@smallexample @c output:0A28767
+2024-W01  Expenses:Food
+2024-W02  Expenses:Food
+@end smallexample
 
 @node Where Expressions Appear, Complex expressions, Definitions and Sequences, Value Expressions
 @section Where Expressions Appear
@@ -10471,7 +10583,7 @@ balance of a named account (@pxref{Using current account balances}).
 Apply @var{expr} to every posting of the parent transaction and
 return @code{true} if every result is true.  Use to express ``all
 postings'' constraints in @option{--limit}:
-@smallexample
+@smallexample @c command:validate
 $ ledger reg --limit 'all(account =~ /Assets:/)'
 @end smallexample
 @end defun
@@ -10486,7 +10598,7 @@ Apply @var{expr} to every posting of the parent transaction and
 return @code{true} if any result is true.  The mirror image of
 @code{all}; the example below selects transactions that touch any
 asset account:
-@smallexample
+@smallexample @c command:validate
 $ ledger reg --limit 'any(account =~ /Assets:/)'
 @end smallexample
 @end defun
