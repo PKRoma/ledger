@@ -1,0 +1,38 @@
+; Regression test for issue #1789: unbalanced transaction when using `format`
+; https://github.com/ledger/ledger/issues/1789
+;
+; The commodity `format` directive should affect only display formatting,
+; never balance checking or the math used to infer implicit conversion
+; prices.  Before the fix, parsing a journal that declared a display
+; precision of 2 for commodity B and then used a smaller amount like
+; `-0.001 B` in a two-commodity transaction produced:
+;
+;     While balancing transaction ...
+;     Unbalanced remainder is: 1 A
+;     Error: Transaction does not balance
+;
+; Root cause: xact_base_t::finalize() inferred a conversion price when the
+; balance had exactly two commodities, but the check `if (*x && *y)`
+; invoked `amount_t::operator bool()` == `!is_zero()`, which respects the
+; commodity's display precision.  With `format 1000.00 B` (precision 2)
+; the amount -0.001 B rounded to zero for display, so the guard skipped
+; the conversion and left 1 A unbalanced.
+;
+; The related guard inside `amount_t::operator/=` had the same defect:
+; dividing by an amount whose exact value is non-zero but rounds to zero
+; at display precision wrongly threw "Divide by zero".  Both checks now
+; use is_realzero(), which inspects the underlying rational value.
+commodity B
+    format 1000.00 B
+
+2000/01/01 note
+    Account    -0.001 B
+    Account         1 A
+
+test bal
+                 1 A  Account
+end test
+
+test reg
+00-Jan-01 note                  Account                         1 A          1 A
+end test
