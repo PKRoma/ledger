@@ -1031,16 +1031,29 @@ spaces at the beginning of each line of the output.
 .It Fl \-price Pq Fl I
 Use the price of the commodity purchase for performing calculations.
 .It Fl \-price-db Ar FILE
-.It Fl \-price-exp Ar INT Pq Fl Z
-Set the expected freshness of price quotes, in
-.Ar INT
-hours.  That
-is, if the last known quote for any commodity is older than this value,
-and if
+.It Fl \-price-exp Ar DURATION Pq Fl Z
+Set the expected freshness of price quotes.
+.Ar DURATION
+is an integer optionally followed by a single unit character
+(case-insensitive):
+.Sy s
+for seconds,
+.Sy m
+for minutes,
+.Sy h
+for hours,
+.Sy d
+for days, or
+.Sy w
+for weeks.  A bare integer is interpreted as hours (so
+.Ql 24
+and
+.Ql 24h
+are equivalent, and the default is 24 hours).  If the last known quote
+for any commodity is older than this value, and if
 .Fl \-download
-is being used, then the Internet will be
-consulted again for a newer price.  Otherwise, the old price is still
-considered to be fresh enough.
+is being used, then the Internet will be consulted again for a newer
+price.  Otherwise, the old price is still considered to be fresh enough.
 Alias for
 .Fl \-leeway .
 .It Fl \-prices-format Ar FMT

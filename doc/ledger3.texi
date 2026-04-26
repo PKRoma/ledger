@@ -6816,10 +6816,14 @@ Group postings together, similar to the balance report.
 @item --price-db @var{FILE}
 Use @file{FILE} for retrieving stored commodity prices.
 
-@item --price-exp @var{INT}
-@itemx --leeway @var{INT}
-@itemx -Z @var{INT}
-Set expected freshness of prices in @var{INT} hours.
+@item --price-exp @var{DURATION}
+@itemx --leeway @var{DURATION}
+@itemx -Z @var{DURATION}
+Set expected freshness of prices.  @var{DURATION} is an integer optionally
+followed by a single unit character (case-insensitive): @samp{s} for seconds,
+@samp{m} for minutes, @samp{h} for hours, @samp{d} for days, or @samp{w} for
+weeks.  A bare integer is interpreted as hours (for example, @samp{24}
+and @samp{24h} are equivalent).
 
 @item --download
 @itemx -Q
@@ -7124,14 +7128,18 @@ Quiet balance assertions.
 @item --price-db @var{FILE}
 Specify the location of the price entry data file.
 
-@item --price-exp @var{INT}
-@itemx --leeway @var{INT}
-@itemx -Z @var{INT}
-Set the expected freshness of price quotes, in @var{INT} hours.  That
-is, if the last known quote for any commodity is older than this value,
-and if @option{--download} is being used, then the Internet will be
-consulted again for a newer price.  Otherwise, the old price is still
-considered to be fresh enough.
+@item --price-exp @var{DURATION}
+@itemx --leeway @var{DURATION}
+@itemx -Z @var{DURATION}
+Set the expected freshness of price quotes.  @var{DURATION} is an integer
+optionally followed by a single unit character (case-insensitive):
+@samp{s} for seconds, @samp{m} for minutes, @samp{h} for hours, @samp{d}
+for days, or @samp{w} for weeks.  A bare integer is interpreted as hours
+(so @samp{24} and @samp{24h} are equivalent, and the default is 24 hours).
+If the last known quote for any commodity is older than this value, and
+if @option{--download} is being used, then the Internet will be consulted
+again for a newer price.  Otherwise, the old price is still considered
+to be fresh enough.
 
 @item --strict
 Ledger normally silently accepts any account or commodity in a posting,
@@ -8722,14 +8730,18 @@ it manually.
 The format of the file can be changed by telling ledger to use the
 @option{--pricedb-format @var{FORMAT_STRING}} you define.
 
-@item --price-exp @var{INT}
-@itemx --leeway @var{INT}
-@itemx -Z @var{INT}
-Set the expected freshness of price quotes, in @var{INT} hours.  That
-is, if the last known quote for any commodity is older than this value,
-and if @option{--download} is being used, then the Internet will be
-consulted again for a newer price.  Otherwise, the old price is still
-considered to be fresh enough.
+@item --price-exp @var{DURATION}
+@itemx --leeway @var{DURATION}
+@itemx -Z @var{DURATION}
+Set the expected freshness of price quotes.  @var{DURATION} is an integer
+optionally followed by a single unit character (case-insensitive):
+@samp{s} for seconds, @samp{m} for minutes, @samp{h} for hours, @samp{d}
+for days, or @samp{w} for weeks.  A bare integer is interpreted as hours
+(so @samp{24} and @samp{24h} are equivalent, and the default is 24 hours).
+If the last known quote for any commodity is older than this value, and
+if @option{--download} is being used, then the Internet will be consulted
+again for a newer price.  Otherwise, the old price is still considered
+to be fresh enough.
 
 @item --download
 @itemx -Q

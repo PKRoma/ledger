@@ -1,0 +1,82 @@
+; Regression test for issue #607: --price-exp should accept unit suffixes.
+; https://github.com/ledger/ledger/issues/607
+;
+; Historically, --price-exp (-Z / --leeway) accepted only a bare integer
+; interpreted as a number of hours.  The issue requested an expanded syntax
+; that also understands minutes, hours, days, and weeks (case-insensitive).
+;
+; The new syntax accepts an integer optionally followed by a single unit
+; character:
+;   s = seconds, m = minutes, h = hours, d = days, w = weeks
+; A bare integer with no suffix is still interpreted as hours, preserving
+; backward compatibility with existing command lines and configuration files.
+
+P 2024/01/01 AAPL $150.00
+
+2024/01/15 Buy Stock
+    Assets:Brokerage    10 AAPL
+    Assets:Checking    $-1500.00
+
+; Bare integer (backward compatible: interpreted as hours).
+test bal --price-exp 24 --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+; Explicit hours suffix (case-insensitive).
+test bal --price-exp 24h --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+test bal --price-exp 24H --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+; Days suffix (case-insensitive).
+test bal --price-exp 7d --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+test bal --price-exp 7D --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+; Weeks, minutes, and seconds suffixes.
+test bal --price-exp 2w --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+test bal --price-exp 45m --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+test bal --price-exp 3600s --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+; -Z short alias accepts the same syntax.
+test bal -Z 24h --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+; --leeway is an alias and must also honor the new syntax.
+test bal --leeway 7d --market Assets:Brokerage
+            $1500.00  Assets:Brokerage
+end test
+
+; An unrecognized unit is reported with a clear error.
+test bal --price-exp 5x Assets -> 1
+__ERROR__
+Error: Invalid unit 'x' for --price-exp; expected s, m, h, d, or w
+end test
+
+; A non-numeric argument is reported as invalid.
+test bal --price-exp abcd Assets -> 1
+__ERROR__
+Error: Invalid value for --price-exp: abcd
+end test
+
+; Negative values are rejected: a stale threshold cannot run backwards.
+test bal --price-exp -5 Assets -> 1
+__ERROR__
+Error: --price-exp value must be non-negative: -5
+end test
