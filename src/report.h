@@ -438,6 +438,7 @@ public:
     HANDLER(period_).report(out);
     HANDLER(period_shift_).report(out);
     HANDLER(pivot_).report(out);
+    HANDLER(pivot_only_).report(out);
     HANDLER(plot_amount_format_).report(out);
     HANDLER(plot_total_format_).report(out);
     HANDLER(prepend_format_).report(out);
@@ -1083,6 +1084,7 @@ public:
   OPTION(report_t, period_shift_);
 
   OPTION(report_t, pivot_);
+  OPTION(report_t, pivot_only_);
 
   OPTION_(
       report_t, plopen, DO() {

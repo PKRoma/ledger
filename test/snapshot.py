@@ -197,6 +197,7 @@ OPTION_MATRIX: dict[str, tuple[bool, set[str]]] = {
     # Display formatting
     "--group-by":        (True,  _BAL_REG),
     "--pivot":           (True,  _BAL_REG),
+    "--pivot-only":      (True,  _BAL_REG),
     "--color":           (False, _BAL_REG),
     "--bold-if":         (True,  _BAL_REG),
     "--average-lot-prices": (False, _BAL_REG),
@@ -219,6 +220,7 @@ OPTION_TEST_VALUES: dict[str, str] = {
     "--forecast-while": "date < [2015]",
     "--group-by": "payee",
     "--pivot": "payee",
+    "--pivot-only": "payee",
     "--bold-if": "amount > 0",
     "--date-format": "%Y-%m-%d",
 }
@@ -331,7 +333,7 @@ def generate_curated_combos() -> list[Combo]:
 VALUE_OPTIONS = frozenset({
     "-f", "--file", "--init-file", "--pager", "--columns", "--output",
     "--sort", "--head", "--tail", "--depth", "--inject", "--forecast-while",
-    "--group-by", "--pivot", "--bold-if", "--date-format", "--format",
+    "--group-by", "--pivot", "--pivot-only", "--bold-if", "--date-format", "--format",
     "--balance-format", "--register-format", "--csv-format", "--plot-format",
     "--pricedb-format", "--prices-format", "--limit", "--only", "--display",
     "--amount", "--total", "--account", "--payee", "--begin", "--end",

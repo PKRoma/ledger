@@ -1651,6 +1651,7 @@ void by_payee_posts::operator()(post_t& post) {
  * the designated element:
  * - SET_DATE: the posting's date is overridden.
  * - SET_ACCOUNT: the expression result is prepended to the account hierarchy.
+ * - SET_ACCOUNT_REPLACE: the expression result replaces the account entirely.
  * - SET_PAYEE: the transaction payee is replaced.
  */
 void transfer_details::operator()(post_t& post) {
@@ -1669,7 +1670,8 @@ void transfer_details::operator()(post_t& post) {
       temp._date = substitute.to_date();
       break;
 
-    case SET_ACCOUNT: {
+    case SET_ACCOUNT:
+    case SET_ACCOUNT_REPLACE: {
       string account_name = substitute.to_string();
 
       // When the expression result ends with ':', the tag was not found.
@@ -1695,8 +1697,13 @@ void transfer_details::operator()(post_t& post) {
         account_t* prev_account = temp.account;
         temp.account->remove_post(&temp);
 
-        account_name += ':';
-        account_name += prev_account->fullname();
+        // SET_ACCOUNT prepends the expression result to the original account
+        // hierarchy, while SET_ACCOUNT_REPLACE drops the original account
+        // entirely (for --pivot-only, issue #1153).
+        if (which_element == SET_ACCOUNT) {
+          account_name += ':';
+          account_name += prev_account->fullname();
+        }
 
         std::list<string> account_names;
         split_string(account_name, ':', account_names);

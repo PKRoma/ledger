@@ -981,6 +981,13 @@ Produce a balance pivot report
 .Qq around
 the given
 .Ar TAG .
+.It Fl \-pivot-only Ar TAG
+Like
+.Fl \-pivot ,
+but replaces the original account hierarchy with the pivoted name
+.Pq Sy TAG : value
+instead of prepending to it, so all postings sharing a tag value collapse
+into a single account bucket.
 .It Fl \-plopen
 Show the unrealized P/L (Profit/Loss Open) for all currently-open positions.
 For each lot, the displayed amount is
