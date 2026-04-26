@@ -72,6 +72,7 @@ typedef std::map<PyObject*, std::shared_ptr<python_module_t>> python_module_map_
 class python_interpreter_t : public session_t {
 public:
   bool is_initialized;
+  bool we_started_python;
 
   std::shared_ptr<python_module_t> main_module;
   python_module_map_t modules_map;
@@ -83,12 +84,15 @@ public:
     return mod;
   }
 
-  python_interpreter_t() : session_t(), is_initialized(false) {
+  python_interpreter_t() : session_t(), is_initialized(false), we_started_python(false) {
     TRACE_CTOR(python_interpreter_t, "");
   }
   virtual ~python_interpreter_t() {
     TRACE_DTOR(python_interpreter_t);
-    if (is_initialized)
+    // Only shut down Python if we started it.  When ledger is loaded as a
+    // Python extension module (via `import ledger`), the embedding
+    // interpreter owns the runtime and will finalize it itself.
+    if (is_initialized && we_started_python)
       Py_Finalize();
   }
 

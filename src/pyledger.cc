@@ -40,6 +40,22 @@ namespace ledger {
 extern void initialize_for_python();
 }
 
+namespace {
+
+/// Callback registered with Python's `atexit` module to drop the global
+/// python_session while the interpreter is still fully alive.  When ledger
+/// is loaded as a Python extension module, the shared_ptr would otherwise
+/// be destroyed by C++ static destructors after Py_Finalize has already
+/// released the GIL, causing boost::python::object destructors to crash
+/// while decrementing refcounts on torn-down Python objects.
+///
+/// This function is exposed to Python as `ledger._release_session`.
+void release_python_session() {
+  ledger::python_session.reset();
+}
+
+} // namespace
+
 BOOST_PYTHON_MODULE(ledger) {
   using namespace ledger;
 
@@ -78,4 +94,19 @@ BOOST_PYTHON_MODULE(ledger) {
   }
 
   initialize_for_python();
+
+  // Register release_python_session with Python's `atexit` module so the
+  // shared_ptr is dropped before Py_Finalize runs.  Py_AtExit callbacks
+  // fire during finalization when the GIL has already been released, so
+  // destroying boost::python objects there is unsafe; atexit callbacks run
+  // earlier, while the interpreter is fully alive.  Without this, static
+  // C++ destructors tear down python_session after Python is gone,
+  // crashing in boost::python object destructors (GitHub issue #513).
+  object release_fn = make_function(&release_python_session);
+  scope().attr("_release_session") = release_fn;
+  try {
+    import("atexit").attr("register")(release_fn);
+  } catch (const error_already_set&) {
+    PyErr_Clear();
+  }
 }
