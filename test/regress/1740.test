@@ -1,0 +1,38 @@
+; Regression test for issue #1740: support --append-format as a complement
+; to --prepend-format.
+
+2024/01/05 Coffee Shop
+    Expenses:Food       $4.50
+    Assets:Cash
+
+2024/01/10 Grocery
+    Expenses:Food      $23.00
+    Assets:Cash
+
+test bal --append-format " <%(account_base)>"
+             $-27.50  Assets:Cash <Cash>
+              $27.50  Expenses:Food <Food>
+--------------------
+                   0 <>
+end test
+
+test reg --append-format "  # %(account_base)"
+24-Jan-05 Coffee Shop           Expenses:Food                 $4.50        $4.50  # Food
+                                Assets:Cash                  $-4.50            0  # Cash
+24-Jan-10 Grocery               Expenses:Food                $23.00       $23.00  # Food
+                                Assets:Cash                 $-23.00            0  # Cash
+end test
+
+test accounts --append-format " | %(account_base)"
+Assets:Cash | Cash
+Expenses:Food | Food
+end test
+
+; Combining --prepend-format and --append-format should bracket each output
+; line.  The existing --prepend-format behavior is unaffected.
+test bal --prepend-format "[%(account_base)]" --prepend-width=10 --append-format "  (end)"
+    [Cash]             $-27.50  Assets:Cash  (end)
+    [Food]              $27.50  Expenses:Food  (end)
+          --------------------
+        []                   0  (end)
+end test

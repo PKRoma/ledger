@@ -1499,6 +1499,7 @@ option_t<report_t>* report_t::lookup_option(const char* p) {
     else OPT_ALT(primary_date, actual_dates);
     else OPT(align_intervals);
     else OPT(anon);
+    else OPT(append_format_);
     else OPT_ALT(color, ansi);
     else OPT(auto_match);
     else OPT(aux_date);
@@ -1996,16 +1997,17 @@ expr_t::ptr_op_t report_t::lookup(const symbol_t::kind_t kind, const string& nam
 #define FORMATTED_POSTS_REPORTER(format)                                                           \
   POSTS_REPORTER(new format_posts(                                                                 \
       *this, report_format(HANDLER(format)), maybe_format(HANDLER(prepend_format_)),               \
-      HANDLED(prepend_width_) ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str())           \
-                              : 0)) ///< Posting report using a named format option
+      HANDLED(prepend_width_) ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str()) : 0,      \
+      maybe_format(HANDLER(append_format_)))) ///< Posting report using a named format option
 
 #define FORMATTED_COMMODITIES_REPORTER(format)                                                     \
-  POSTS_REPORTER_(&report_t::commodities_report,                                                   \
-                  new format_posts(*this, report_format(HANDLER(format)),                          \
-                                   maybe_format(HANDLER(prepend_format_)),                         \
-                                   HANDLED(prepend_width_)                                         \
-                                       ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str())  \
-                                       : 0)) ///< Commodity report using a named format option
+  POSTS_REPORTER_(                                                                                 \
+      &report_t::commodities_report,                                                               \
+      new format_posts(                                                                            \
+          *this, report_format(HANDLER(format)), maybe_format(HANDLER(prepend_format_)),           \
+          HANDLED(prepend_width_) ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str()) : 0,  \
+          maybe_format(HANDLER(append_format_)))) ///< Commodity report using a named \
+                                                  ///< format option
 
 #define ACCOUNTS_REPORTER(formatter)                                                               \
   expr_t::op_t::wrap_functor(reporter<account_t, acct_handler_ptr, &report_t::accounts_report>(    \
@@ -2015,8 +2017,8 @@ expr_t::ptr_op_t report_t::lookup(const symbol_t::kind_t kind, const string& nam
 #define FORMATTED_ACCOUNTS_REPORTER(format)                                                        \
   ACCOUNTS_REPORTER(new format_accounts(                                                           \
       *this, report_format(HANDLER(format)), maybe_format(HANDLER(prepend_format_)),               \
-      HANDLED(prepend_width_) ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str())           \
-                              : 0)) ///< Account report using a named format option
+      HANDLED(prepend_width_) ? lexical_cast<std::size_t>(HANDLER(prepend_width_).str()) : 0,      \
+      maybe_format(HANDLER(append_format_)))) ///< Account report using a named format option
 
   case symbol_t::COMMAND:
     // Command dispatch: maps user-facing command names (balance, register, print, etc.)

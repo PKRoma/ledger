@@ -7228,6 +7228,12 @@ Set the width in characters of the amount column in the
 @item --anon
 Anonymize registry output, mostly for sending in bug reports.
 
+@item --append-format @var{FORMAT_STRING}
+Append @var{FORMAT_STRING} to every line of the output, rendered just
+before the line's terminating newline.  This is the symmetric
+counterpart to @option{--prepend-format} and accepts the same format
+language.
+
 @item --auto-match
 When generating a ledger transaction from a CSV file using the
 @command{convert} command, automatically match an account from the
