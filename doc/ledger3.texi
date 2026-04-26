@@ -9401,15 +9401,33 @@ postings:
 $ ledger -b "this month" register checking
 @end smallexample
 
+Internally each expression goes through three phases.  Parsing turns the
+text into an abstract syntax tree.  Compilation walks that tree once,
+resolving every name it can against the surrounding scope and folding
+constant sub-expressions away.  Evaluation walks the compiled tree
+again for each posting, transaction, or account the report visits, and
+produces a value.  You rarely need to think about these phases, but two
+of their consequences do leak out: identifiers that depend on the
+current posting (@code{amount}, @code{payee}, @code{date},
+@dots{}) are looked up at evaluation time so they always reflect the
+posting at hand, and the recursion limit on a single evaluation is 256
+levels deep, which is generous enough that you only see the error if
+you have written something genuinely circular.
+
 @menu
 * Value Types::
+* Literals::
 * Variables::
+* Names and Scope::
 * Functions::
 * Operators::
+* Member Access::
+* Definitions and Sequences::
+* Where Expressions Appear::
 * Complex expressions::
 @end menu
 
-@node Value Types, Variables, Value Expressions, Value Expressions
+@node Value Types, Literals, Value Expressions, Value Expressions
 @section Value Types
 
 Every value expression evaluates to a value of one of the types listed
@@ -9496,7 +9514,55 @@ explicit call: @code{to_int}, @code{to_string}, @code{to_amount},
 @code{to_sequence} are all documented in the @ref{Miscellaneous}
 section.
 
-@node Variables, Functions, Value Types, Value Expressions
+@node Literals, Variables, Value Types, Value Expressions
+@section Literals
+
+The lexer recognises six kinds of literal, plus the keywords
+@code{true}, @code{false}, and @code{null}.
+
+A @strong{numeric or amount literal} is whatever @code{amount_t::parse}
+will accept: bare numbers like @samp{42} and @samp{3.14}, commoditised
+amounts like @samp{$10.00}, @samp{€-1@comma{}25}, or @samp{1500 AAPL},
+and locale-flavoured forms with grouping (@samp{1@comma{}000.00}).  The
+result has type @code{INTEGER} when the number is a plain integer and
+@code{AMOUNT} otherwise.
+
+A @strong{string literal} is written in single quotes (@code{'hello'})
+or double quotes (@code{"hello"}).  The two forms differ in one
+respect: a double-quoted literal is first offered to the amount
+parser, so @code{"$10.00"} is an @code{AMOUNT}, while @code{'$10.00'}
+is the seven-character @code{STRING} @samp{$10.00}.  Use single quotes
+when you want a string regardless of contents.
+
+A @strong{brace-amount literal} like @samp{@{$10.00@}} parses the
+contents as an amount without commodity migration, so the precision
+and style of the surrounding journal are not affected.  This is the
+form to use when you want to write an amount that should be left
+untouched by the report's display rules.
+
+A @strong{mask literal} is a regular expression delimited by forward
+slashes, such as @samp{/Assets:/}.  The result has type @code{MASK}.
+Backslashes escape the closing slash and themselves; every other
+backslash sequence is passed through to the regex engine, so
+@samp{/\\d+/} matches a run of digits and @samp{/\\|/} matches a literal
+pipe.  A slash in operator context is the division operator instead;
+the parser distinguishes the two automatically.
+
+A @strong{date literal} is written in square brackets and may be
+either a calendar date or any period expression that resolves to a
+starting date.  @samp{[2024/01/01]}, @samp{[last month]}, and
+@samp{[60 days hence]} all produce a @code{DATE}.  The full grammar
+inside the brackets is the same as for @option{--period}; see
+@ref{Period Expressions}.
+
+The bare words @code{true} and @code{false} produce
+@code{BOOLEAN} values.  The keyword @code{null} is also accepted and
+produces the empty @code{VOID} value; this is the only way to write
+the void value directly, and it is mainly useful as the right-hand
+side of an @code{if}/@code{else} branch when one arm should produce
+nothing.
+
+@node Variables, Names and Scope, Literals, Value Expressions
 @section Variables
 @findex --amount @var{EXPR}
 @findex --total @var{VEXPR}
@@ -9548,51 +9614,149 @@ This is always the present moment/date.
 
 @item d
 @itemx date
-A posting's date, as the number of seconds past the epoch.  This
-is always ``today'' for an account.
+A posting's date.  For an account this is the same as @code{today}.
+@code{primary_date} is always the entry date even when @option{--aux-date}
+is in effect, and @code{actual_date} is a synonym for @code{primary_date}.
 
 @item aux_date
-A posting's aux date (also called effective date).  This is the
-secondary date specified after @samp{=} in a transaction header, e.g.,
-@samp{2020/10/01=2020/10/02}.  Returns an empty value for postings
-that have no auxiliary date.  Can be used in value expressions to
-filter by auxiliary date; @pxref{Complex expressions} for examples.
+@itemx effective_date
+A posting's auxiliary or effective date, the secondary date specified
+after @samp{=} in a transaction header (e.g.,
+@samp{2020/10/01=2020/10/02}).  Returns an empty value for postings
+that have no auxiliary date.  Combine with a null check using
+@samp{and} when comparing.  @xref{Complex expressions}.
+
+@item value_date
+The date used for valuation when the report converts amounts to
+market value.  For an ordinary posting this is the same as
+@code{date}, but the reporting pipeline may override it (the period
+machinery sets it to the period-end date so that running totals are
+revalued at each period boundary).  Always use @code{value_date}
+inside expressions you pass to @code{market} -- using @code{date}
+defeats the override and gives prices for the wrong day.
+
+@item datetime
+A posting's datetime, including time of day.  Equal to @code{date}'s
+midnight unless the posting came from a timeclock check-in, in which
+case it carries the check-in time.
+
+@item checkin
+@itemx checkout
+The check-in and check-out timestamps for postings produced by
+timeclock entries.  Empty for ordinary postings.
 
 @item a
 @itemx amount
-The posting's amount; the balance of an account, without
-considering children.
+The posting's amount.  For an account, the balance of the account
+itself, without subaccounts.
 
 @item b
 @itemx cost
 The cost of a posting; the cost of an account, without its
 children.  To compute the market value of a posting, use the
-@code{market} function or the single-letter function @code{P}
-(@pxref{Functions}).  The unrealized gain is then @samp{P(a) - b}.
+@code{market} function or its single-letter alias @code{P}
+(@pxref{Functions}).  The unrealised gain is then @samp{P(a) - b}.
+
+@item price
+The per-unit price stored in the amount's lot annotation, or
+@code{NULL_VALUE} if the amount is not annotated.
+
+@item has_cost
+True if the posting has an explicit cost.  @code{cost_calculated} is
+true when the cost was inferred from a balancing posting rather than
+written by the user.
+
+@item commodity
+The commodity of the posting's amount, as a string.  See the entry
+under @ref{Miscellaneous} for examples that combine it with regex
+operators.
+
+@item primary
+True when the posting's commodity is the primary (cost-side) commodity
+of the journal.
+
+@item account
+@itemx a (in account scope)
+The account a posting affects, or the account itself in account
+scope.  @code{account_base} returns just the last component of the
+hierarchy, so @samp{Expenses:Food:Lunch} becomes @samp{Lunch}.
+@code{display_account} returns the account with @code{[]} or @code{()}
+wrapping for virtual postings.
 
 @item depth
-The depth (``level'') of an account.  If an account has one parent,
-its depth is one.
+@itemx l
+The depth (``level'') of an account, counting from zero at the
+top-level master account.  @samp{Expenses:Food:Lunch} has depth 3.
+The single-letter alias @code{l} is convenient inside format strings.
 
 @item n
+@itemx index
+@itemx count
 The index of a posting, or the count of postings affecting an
-account.
+account.  In account scope @code{count} is the count for that account
+alone and @code{N} is the cumulative count including subaccounts.
+
+@item subcount
+In account scope, the number of postings affecting this account
+without considering subaccounts.
+
+@item code
+The transaction code, the text inside parentheses between the date
+and the payee (e.g., @samp{(C0D3)}).
+
+@item payee
+@itemx p
+The payee of the posting's parent transaction.
+
+@item note
+The full transaction-level note, including comments on individual
+postings.
+
+@item comment
+Just the posting's own comment.
 
 @item X
 @itemx cleared
-@samp{1} if a posting's transaction has been cleared, @samp{0} otherwise.
+True if the posting's transaction has been cleared.  @code{Y} or
+@code{pending} is true for the pending state, and @code{uncleared} is
+true when the state is plain uncleared.  @code{status} or @code{state}
+returns the state as an integer (@code{0}, @code{1}, or @code{2}).
 
-@item uncleared
-@samp{1} if a posting's transaction state is uncleared, @samp{0} otherwise.
-
-@item pending
-@samp{1} if a posting's transaction state is pending, @samp{0} otherwise.
+@item L
+@itemx actual
+True for transactions written by the user; false for transactions
+generated by automated transactions or budget periods.
 
 @item R
-@samp{1} if a posting is not virtual, @samp{0} otherwise.
+@itemx real
+True if the posting is not virtual; false for postings whose account
+is wrapped in @code{[]} or @code{()}.
 
-@item Z
-@samp{1} if a posting is not automated, @samp{0} otherwise.
+@item virtual
+True for virtual postings (the inverse of @code{real}).
+
+@item magnitude
+For a transaction, the absolute value of the positive (debit) side,
+useful when ordering by transaction size regardless of direction.
+
+@item filename
+@itemx filebase
+@itemx filepath
+@itemx beg_line
+@itemx beg_pos
+@itemx end_line
+@itemx end_pos
+The source location of the item: full pathname, base name, parent
+path, and the byte and line offsets that bracket the item in its
+source file.  These are most useful in scripts that need to point a
+human or another tool back at the original journal text.
+
+@item id
+@itemx uuid
+@itemx seq
+@code{id} (and the alias @code{uuid}) returns the value of the
+@code{UUID} metadata tag if one is set, otherwise an empty string.
+@code{seq} is the parse-order sequence number of the item.
 
 @end table
 
@@ -9611,40 +9775,172 @@ children.
 
 @end table
 
-@node Functions, Operators, Variables, Value Expressions
+@node Names and Scope, Functions, Variables, Value Expressions
+@section Names and Scope
+
+When the expression engine sees a bare identifier, it looks the name
+up in a chain of nested scopes.  The bottom of the chain is the
+posting (or the account, in a balance report); above the posting is
+its transaction, then the @code{item} base which both share, then the
+report, and finally the session.  Each layer answers for the names it
+knows and otherwise delegates to the layer above.  This is why
+@code{amount} and @code{payee} resolve against the current posting,
+@code{date} can mean either the posting date or the report's notion
+of ``today'' depending on the layer that answers, and functions like
+@code{market} and @code{format_date} are always available regardless
+of what is being iterated.
+
+Several short aliases coexist with their long names: @code{a} for
+@code{amount}, @code{d} for @code{date}, @code{p} for @code{payee},
+@code{X} for @code{cleared}, and so on.  The aliases are inherited
+from Ledger 2.x and are still useful when an expression appears
+inside a tight format string, but I prefer the long names everywhere
+else because they read better in a journal file.
+
+A single-letter @code{m}, @code{P}, @code{U}, @code{S}, @code{t}, or
+@code{T} is treated as the corresponding function or report variable
+even when no posting is in scope, and lookups for the long names
+@code{now}, @code{today}, @code{market}, @code{abs}, @code{strip},
+@code{display_amount}, and @code{display_total} go to the same
+implementations.
+
+If a name resolves to nothing, the expression engine raises
+@samp{Unknown identifier 'NAME'}.  When you hit this error the most
+likely cause is that the expression is being evaluated in a scope
+that does not provide the field; for example, posting-level fields
+like @code{amount} are not available inside a @code{check} directive
+on a commodity.
+
+When debugging, the @command{eval} pre-command takes any value
+expression and prints its result, and @command{parse} prints the AST
+the parser produced.  Both are useful for confirming what your
+expression actually means.
+
+@node Functions, Operators, Names and Scope, Value Expressions
 @section Functions
 
-The available one letter functions are:
+The single-letter functions are short aliases for their longer
+counterparts.
 
 @table @code
 
 @item -
-Negates the argument.
+Negates the argument.  Equivalent to @code{neg}.
 
 @item U
-The absolute (unsigned) value of the argument.
+Absolute (unsigned) value.  Equivalent to @code{abs}.
 
 @item S
-Strips the commodity from the argument.
+Strips lot annotations from the argument.  Equivalent to @code{strip}.
 
 @item P
-The present market value of the argument.  The syntax @samp{P(x,d)} is
-supported, which yields the market value at time @samp{d}.  If no date
-is given, then the current moment is used.
+Market value of the argument.  @samp{P(x)} is the value as of the
+report's @code{now}; @samp{P(x,d)} is the value as of date @samp{d}.
+Equivalent to @code{market}.
+
+@item t
+The current value of @option{--amount}; same as @code{display_amount}.
+
+@item T
+The current value of @option{--total}; same as @code{display_total}.
 
 @end table
 
-@node Operators, Complex expressions, Functions, Value Expressions
+The named functions group naturally into a few clusters, all of which
+are documented individually in @ref{Miscellaneous}.
+
+Numeric helpers include @code{abs}, @code{round}, @code{rounded},
+@code{unrounded}, @code{roundto}, @code{floor}, @code{ceiling},
+@code{truncate}, @code{quantity}, @code{percent}, @code{min},
+@code{max}, @code{int} (alias for @code{to_int}), and @code{str}
+(alias for @code{to_string}).
+
+Date helpers include @code{format_date} and @code{format_datetime}
+(both of which take an optional @code{strftime}-style template) and
+the variables @code{now}, @code{today}, and @code{value_date}.
+
+Pricing helpers include @code{market}, @code{commodity_price},
+@code{set_commodity_price}, @code{clear_commodity}, @code{nail_down},
+@code{lot_price}, @code{lot_date}, @code{lot_tag}, @code{averaged_lots},
+@code{fifo_lots}, and @code{lifo_lots}.
+
+Metadata helpers include @code{has_tag}/@code{has_meta} (presence
+test), @code{tag}/@code{meta} (value lookup), and the boolean
+@code{any}/@code{all} which apply a sub-expression to every posting
+of the parent transaction.
+
+Lookup helpers include @code{account} (which resolves an account name
+or pattern to an account object whose @code{.total} and @code{.amount}
+properties are available), and @code{commodity} (which returns a
+posting amount's commodity as a string).
+
+Conversion functions named @code{to_TYPE} coerce a value to a target
+type: @code{to_boolean}, @code{to_int}, @code{to_amount},
+@code{to_balance}, @code{to_date}, @code{to_datetime},
+@code{to_string}, @code{to_mask}, and @code{to_sequence}.  These are
+needed when type inference cannot decide; for example,
+@samp{to_int(tag('Hours'))} interprets a tag's text as an integer.
+
+Sequence helpers include @code{get_at(seq, index)} for indexing into
+a sequence, @code{is_seq} as a type test, and @code{to_sequence} for
+forced promotion.
+
+Output and formatting helpers include @code{format} (apply a format
+string), @code{format_date}, @code{format_datetime}, @code{justify},
+@code{trim}, @code{truncated}, @code{join}, @code{quoted},
+@code{quoted_rfc}, @code{ansify_if}, @code{print}, and the colour
+predicates @code{black}, @code{blue}, @code{cyan}, @code{green},
+@code{magenta}, @code{red}, @code{white}, @code{yellow},
+@code{bold}, @code{blink}, and @code{underline} which yield a colour
+name suitable for passing to @code{ansify_if}.
+
+The @code{options} variable provides read access to command-line
+options as a scope.  After @samp{ledger -X $ -D ...} the expression
+@code{options.exchange} returns @samp{$} and @code{options.daily}
+returns @code{true}.
+
+@node Operators, Member Access, Functions, Value Expressions
 @section Operators
 
-The operators, in order of precedence, are:
+The full operator table, from tightest to loosest binding, is:
 
-@enumerate
-@item @code{* /}
-@item @code{+ -}
-@item @code{! < > =}
-@item @code{& | ?:}
-@end enumerate
+@multitable @columnfractions 0.30 0.70
+@headitem Level @tab Operators
+@item member access
+@tab @code{.}
+@item function call
+@tab @code{(args)}
+@item unary prefix
+@tab @code{!} / @code{not}, @code{-}
+@item multiplicative
+@tab @code{*}, @code{/} (also @code{div})
+@item additive
+@tab @code{+}, @code{-}
+@item comparison
+@tab @code{==}, @code{!=}, @code{<}, @code{<=}, @code{>}, @code{>=},
+@code{=~}, @code{!~}, @code{==~}
+@item logical AND
+@tab @code{and} / @code{&&} / @code{&}
+@item logical OR
+@tab @code{or} / @code{||} / @code{|}
+@item conditional
+@tab @code{?:} and the postfix form @code{value if cond [else alt]}
+@item comma list
+@tab @code{,}
+@item lambda
+@tab @code{->}
+@item assignment
+@tab @code{=}
+@item statement sequence
+@tab @code{;}
+@end multitable
+
+@code{and} and @code{&&} mean the same thing as @code{&}; @code{or} and
+@code{||} mean the same thing as @code{|}; @code{not} is the keyword
+form of @code{!}; and @code{div} is a keyword spelling of @code{/} for
+the rare case where you want division but a regex literal is also
+syntactically possible.  Both @code{!=} and @code{!~} are syntactic
+sugar for @code{not (a == b)} and @code{not (a =~ b)}.
 
 @menu
 * Unary Operators::
@@ -9726,9 +10022,155 @@ Logical OR -- at least one side must be true.
 Arithmetic operators.
 @item ? :
 Ternary conditional: @samp{EXPR ? VALUE_IF_TRUE : VALUE_IF_FALSE}.
+The same shape can be written postfix as
+@samp{VALUE_IF_TRUE if EXPR else VALUE_IF_FALSE}, which is sometimes
+clearer in format strings.  The @code{else} clause may be omitted, in
+which case the false branch yields the empty value.
 @end table
 
-@node Complex expressions,  , Operators, Value Expressions
+@node Member Access, Definitions and Sequences, Operators, Value Expressions
+@section Member Access
+
+The dot operator looks a name up inside the value on its left.  The
+left-hand side must evaluate to a scope.  Three uses come up
+regularly:
+
+A call to @code{account(@var{name})} returns the named account as a
+scope, exposing every account-level property under the dot.  The two
+most useful are @code{.total} (the cumulative balance including
+subaccounts) and @code{.amount} (the balance of the named account
+alone).  @code{.note}, @code{.depth}, @code{.parent}, and
+@code{.partial_account} are also available.
+
+@smallexample
+$ ledger reg --limit 'account("Assets:Checking").total > $1000'
+@end smallexample
+
+The dot also works when the left-hand side is itself a posting or
+account that has been picked up via @code{any}, @code{all}, or
+similar; this is how @code{account.note} and @code{account.depth} are
+written in expressions you find scattered through the standard format
+strings.
+
+The @code{options} variable is a scope that exposes every
+command-line option by its long name with hyphens replaced by
+underscores.  Boolean options yield @code{true} or @code{false};
+options that take a value yield the value as a string.  This is the
+hook that built-in formats use to vary their output by option:
+
+@smallexample
+%(options.color ? ansify_if(payee, blue) : payee)
+@end smallexample
+
+When a name is dotted that the engine cannot resolve, you get
+@samp{Left operand does not evaluate to an object}.
+
+@node Definitions and Sequences, Where Expressions Appear, Member Access, Value Expressions
+@section Definitions and Sequences
+
+A semicolon separates two expressions and discards the first.
+@samp{a; b} evaluates @code{a} for its side effects and then yields
+@code{b}.  An assignment uses @code{=} and binds a name to a value in
+the local scope of the current expression:
+
+@smallexample
+biggest = max(amount, biggest); biggest
+@end smallexample
+
+The first time the expression is evaluated, the unresolved
+@code{biggest} on the right of @code{max} reads as the empty
+@code{VOID}; @code{max} treats that as ``no value'' and returns
+@code{amount}; the assignment stores it.  On the second evaluation
+@code{biggest} reads back the previous value, and so on.  This
+accumulator pattern is how I track running maxima, minima, and
+counters across postings without leaving any state in the journal.
+
+The expression engine isolates these definitions per expression: an
+accumulator declared inside @option{--bold-if} cannot leak into
+@option{--display}, and neither can collide with names you bind on
+the command line via @option{--define}.
+
+The arrow @code{->} introduces a lambda.  The left-hand side is a
+parameter list (a single name, or a comma-separated list in
+parentheses) and the right-hand side is the body:
+
+@smallexample
+square = x -> x * x; square(5)
+@end smallexample
+
+Lambdas combine with assignment to give you function definitions, and
+the @code{def} or @code{define} keyword in the journal does the same:
+
+@smallexample
+def lunch_total = x -> x * 1.0825
+@end smallexample
+
+makes @code{lunch_total} available throughout the journal afterward.
+
+Function calls use ordinary parentheses, and a function that takes no
+arguments must still be called with @code{()} when you want the call
+rather than the function value.  @samp{format_date(date)} renders the
+posting's date with the default format; @samp{format_date(date,
+'%Y-W%V')} adds an ISO week number.
+
+@node Where Expressions Appear, Complex expressions, Definitions and Sequences, Value Expressions
+@section Where Expressions Appear
+
+Every place that evaluates a value expression provides its own scope.
+
+@strong{Predicates and report options}.  @option{--limit (-l)},
+@option{--display (-d)}, @option{--only}, @option{--bold-if},
+@option{--sort (-S)}, @option{--amount (-t)}, @option{--total (-T)},
+@option{--display-amount}, @option{--display-total},
+@option{--revalued-total}, and several other options either take a
+predicate (anything non-zero and non-empty is true) or a calculated
+value.  All run with the posting in scope, so they see
+@code{amount}, @code{date}, @code{payee}, and so on directly.
+
+@strong{Format strings}.  Anything between @code{%(@dots{})} in a
+format string is a value expression.  See @ref{Format Strings} for
+the surrounding template syntax.  The expression's result is rendered
+to a string, with the report's column-width rules applied based on
+which @samp{%} directive contained it.
+
+@strong{Automated transactions}.  The @code{=} line of an automated
+transaction is a predicate, evaluated against each posting in the
+input journal.  The @code{:=} variant evaluates only against the
+currently parsing transaction.  Inside the body of an automated
+transaction, expression amounts written with @code{(EXPR)} are
+evaluated for each matched posting and may reference @code{amount}
+and @code{account}.
+
+@strong{Journal directives}.  Five directives in journal files
+evaluate value expressions:
+
+@table @code
+@item assert @var{EXPR}
+Evaluate @var{EXPR} at parse time.  If it is false, parsing stops
+with an assertion error.
+@item check @var{EXPR}
+Evaluate @var{EXPR} at parse time.  If it is false, emit a warning
+and continue.
+@item eval @var{EXPR}
+@itemx expr @var{EXPR}
+Evaluate @var{EXPR} for its side effects.  Useful with
+@code{def} and @code{define} to install function definitions visible
+to the rest of the journal.
+@item value @var{EXPR}
+Set the journal's default value expression to @var{EXPR}.  When
+attached to an account or commodity directive, @code{value} sets the
+expression used to compute that entity's value at report time.
+@end table
+
+Tag check directives can also include value expressions: a tag's
+content is matched against an associated regex and, if specified, an
+expression that further constrains acceptable values.
+
+@strong{Balance assertions and assignments}.  The @code{=} that
+follows a posting amount in a journal can carry a value expression on
+its right-hand side.  See @ref{Balance verification} for the details.
+
+@node Complex expressions, , Where Expressions Appear, Value Expressions
 @section Complex expressions
 
 More complicated expressions are possible using:
@@ -9962,9 +10404,28 @@ and @code{assert} or @code{check} directives to inspect the running
 balance of a named account (@pxref{Using current account balances}).
 @end defun
 
+@defun all expr
+Apply @var{expr} to every posting of the parent transaction and
+return @code{true} if every result is true.  Use to express ``all
+postings'' constraints in @option{--limit}:
+@smallexample
+$ ledger reg --limit 'all(account =~ /Assets:/)'
+@end smallexample
+@end defun
+
 @defun amount_expr
 Return the calculated amount of the posting according to the @option{--amount}
 option.
+@end defun
+
+@defun any expr
+Apply @var{expr} to every posting of the parent transaction and
+return @code{true} if any result is true.  The mirror image of
+@code{all}; the example below selects transactions that touch any
+asset account:
+@smallexample
+$ ledger reg --limit 'any(account =~ /Assets:/)'
+@end smallexample
 @end defun
 
 @defun ansify_if value color
@@ -10000,8 +10461,26 @@ Expenses:Office Supplies ¤ 124,00
 @end smallexample
 @end defun
 
+@defvar checkin
+@defvarx checkout
+The check-in or check-out timestamp on a posting produced by a
+timeclock entry; empty for ordinary postings.
+@end defvar
+
 @defun clear_commodity
 Clear commodity pricing information.
+@end defun
+
+@defvar cleared
+@defvarx X
+True if the posting's transaction state is cleared.  See also
+@code{pending}, @code{uncleared}, and @code{state}.
+@end defvar
+
+@defun commodity amount
+Return the commodity of @var{amount} as a string.  Equivalent to the
+@code{commodity} variable but takes an explicit argument so it can be
+applied to any amount, not just the posting's @code{amount}.
 @end defun
 
 @defun commodity_price commodity
@@ -10016,6 +10495,23 @@ $ ledger -f expr.dat --format "%(account) %(code)\n" reg assets
 @smallexample @c output:46FCFD3
 Assets:Cash C0D3
 @end smallexample
+@end defvar
+
+@defvar cost
+@defvarx b
+The cost of a posting.  For account scope, the cost of the account
+itself, without subaccounts.  Pair with @code{P(amount) - cost} to
+get the unrealised gain.
+@end defvar
+
+@defvar count
+@defvarx n
+@defvarx N
+For postings, @code{n} (or @code{count}) is the index of the current
+posting.  For accounts, @code{count} is the count of postings affecting
+the account itself, and @code{N} is the cumulative count including
+subaccounts.  @code{subcount} is a long alias for the
+account-without-subaccounts count.
 @end defvar
 
 @defvar comment
@@ -10057,6 +10553,21 @@ $ ledger -f expr.dat --format "%(date) %(account)\n" reg assets
 @smallexample @c output:67EBA45
 2015/01/16 Assets:Cash
 @end smallexample
+@end defvar
+
+@defvar datetime
+The posting's datetime.  Equal to the date at midnight unless the
+posting was generated from a timeclock check-in, in which case the
+recorded time of day is preserved.  Compare against
+@code{format_datetime(now, '...')} to filter or sort by hour.
+@end defvar
+
+@defvar depth
+@defvarx l
+For an account, the level of nesting in the account hierarchy
+(@samp{Assets:Checking} has depth 2).  @code{depth_parent} returns
+the parent's depth and @code{depth_spacer} the indentation string
+that the standard balance format uses.
 @end defvar
 
 @defvar display_account
@@ -10102,6 +10613,12 @@ numbers Ledger actually displays.
 Format total for display.
 @end defun
 
+@defun fifo_lots balance
+Return the lots in @var{balance} sorted by acquisition date,
+oldest first.  Used by @option{--lots-fifo}.  @code{lifo_lots}
+sorts the same balance newest first.
+@end defun
+
 @defun floor value
 Return the next integer of @var{value} toward @math{-}infinity.
 @smallexample @c command:4FDC7C5,with_input:3406FC1
@@ -10134,8 +10651,11 @@ Return the @var{datetime} as a string using @var{format}.  Refer to
 @end defun
 
 @defun get_at sequence index
-Return the value in @var{sequence} at @var{index}.  The first element is @var{index} 0.
-@value{InternalUseOnly}
+Return the element of @var{sequence} at @var{index}, counting from
+zero.  When @var{sequence} is not actually a sequence and
+@var{index} is @code{0}, the value is returned unchanged, which makes
+@code{get_at} safe to use on the result of @code{==~} regardless of
+whether the regex contained capture groups.
 @end defun
 
 @defun has_tag tag_name
@@ -10154,11 +10674,22 @@ $ ledger reg --limit 'has_tag(/^Project/)'
 @end defun
 
 @defun is_seq value
-Return true if @var{value} is a sequence.  @value{InternalUseOnly}
+Return true if @var{value} is a sequence.  Useful in format strings
+that may receive either a single value or a multi-element sequence
+(such as the budget and cleared formats produced by @command{ledger
+budget} and @command{ledger cleared}):
+@smallexample
+%(is_seq(display_total) ? get_at(display_total, 0) : display_total)
+@end smallexample
 @end defun
 
 @defun join value
 Replace all newlines in @var{value} with @code{\n}.
+@end defun
+
+@defun lifo_lots balance
+Return the lots in @var{balance} sorted by acquisition date,
+newest first.  See @code{fifo_lots} for the opposite ordering.
 @end defun
 
 @defun justify value first_width latter_width right_justify colorize
@@ -10191,16 +10722,45 @@ Return the lot price of a posting.
 Return the lot tag of a posting.
 @end defun
 
-@defun market value datetime
-@defunx P
-Return the price of @var{value} at @var{datetime}.  Note that @var{datetime}
-must be surrounded by brackets in order to be parsed correctly,
-e.g. @code{[2012/03/23]}.
+@defvar magnitude
+On a transaction, the absolute value of the positive (debit) side.
+Useful for sorting transactions by size regardless of which way
+money flowed.
+@end defvar
+
+@defun market value datetime commodity
+@defunx P value
+@defunx P value datetime
+Return the price of @var{value} at @var{datetime}, optionally
+exchanged into @var{commodity}.  @var{datetime} must be surrounded by
+brackets to be parsed correctly, e.g. @code{[2012/03/23]}; if it is
+omitted, the report's @code{now} is used.  When @var{commodity} is
+given (as a string), the result is forced to that commodity.
+
+@code{market} is the workhorse for building custom revaluation
+expressions.  Pass @code{value_date} rather than @code{date} so that
+the period machinery's date overrides are honoured.
+@end defun
+
+@defun max value_a value_b
+@defunx min value_a value_b
+Return the larger or smaller of two values.  A null argument is
+treated as missing, so @samp{max(amount, biggest)} is safe even on
+the first iteration where @code{biggest} has not been assigned yet.
+This is the foundation of accumulator patterns
+(@pxref{Definitions and Sequences}).
 @end defun
 
 @defun nail_down
 Fix the precision of an amount.
 @end defun
+
+@defvar null
+The empty (@code{VOID}) value.  Reading any unset variable yields
+@code{null}; comparing with @code{null} is rare since the value is
+already falsy in boolean tests.  Useful as the @code{else} branch of
+an @code{if} when one arm should produce nothing.
+@end defvar
 
 @defvar now
 @defvarx m
@@ -10230,7 +10790,14 @@ true $
 @end smallexample
 @end defvar
 
+@defvar parent
+On an account, the parent account in the hierarchy.
+@code{partial_account} is the parent's name with the master prefix
+stripped, useful when building tree-style displays.
+@end defvar
+
 @defvar payee
+@defvarx p
 The payee (description) of the posting's parent transaction.
 
 @smallexample
@@ -10240,6 +10807,12 @@ $ ledger reg --limit 'not (payee =~ /Transfer/)'
 
 @samp{@@/REGEX/} is a shorthand for @samp{payee =~ /REGEX/}
 (@pxref{Complex expressions}).
+@end defvar
+
+@defvar pending
+@defvarx Y
+True if the posting's transaction state is pending (the @samp{!}
+flag).  Equivalent to @samp{state == 1}.
 @end defvar
 
 @defun percent value_a value_b
@@ -10253,8 +10826,17 @@ $ ledger -f expr.dat --format "%(percent(amount, 200))\n" reg
 @end smallexample
 @end defun
 
+@defvar primary_date
+@defvarx actual_date
+The transaction's primary date, which is what @code{date} returns
+when @option{--aux-date} is not in effect.  Useful for filters that
+should ignore the auxiliary-date setting.
+@end defvar
+
 @defun print value
-Print @var{value} to stdout.  @value{InternalUseOnly}
+Print @var{value} to stdout as a side effect, returning the value
+unchanged.  Mostly used as a diagnostic when chaining expressions
+during debugging.
 @end defun
 
 @defun quantity value
@@ -10297,6 +10879,13 @@ Expenses:Office Supplies ¤ 123,50
 @end smallexample
 @end defun
 
+@defvar real
+@defvarx R
+True if the posting is not virtual.  @code{virtual} is the
+complement.  Use these to limit reports to real-money flows or, less
+often, just the virtual accounting.
+@end defvar
+
 @defun scrub value
 Clean @var{value} using various transformations such as @code{round}, stripping
 value annotations, and more.
@@ -10310,29 +10899,43 @@ Set the price for a commodity.
 Return true if expression given to @option{--bold-if} evaluates to true.  @value{InternalUseOnly}
 @end defun
 
+@defvar state
+@defvarx status
+The posting's clearing state as an integer: @code{0} for uncleared,
+@code{1} for pending, @code{2} for cleared.  More compact than the
+three boolean variables when sorting on state.
+@end defvar
+
 @defun strip value
 @defunx S
 Strip value annotation from @var{value}.
 @end defun
 
 @defun to_amount value
-Convert @var{value} to an amount.  @value{InternalUseOnly}
+Coerce @var{value} to an @code{AMOUNT}.  Used when type promotion has
+left a value at @code{INTEGER} or @code{BALANCE} and an amount is
+specifically needed.
 @end defun
 
 @defun to_balance value
-Convert @var{value} to a balance.  @value{InternalUseOnly}
+Coerce @var{value} to a @code{BALANCE}.  Promotes single-commodity
+amounts to a one-element balance.
 @end defun
 
 @defun to_boolean value
-Convert @var{value} to a boolean.  @value{InternalUseOnly}
+Coerce @var{value} to a @code{BOOLEAN}.  Empty strings, zero amounts,
+and the void value all become @code{false}.
 @end defun
 
 @defun to_date value
-Convert @var{value} to a date.  @value{InternalUseOnly}
+Coerce @var{value} to a @code{DATE}.  A datetime loses its time of
+day; a string is parsed as a date in the same forms accepted by date
+literals.
 @end defun
 
 @defun to_datetime value
-Convert @var{value} to a datetime.  @value{InternalUseOnly}
+Coerce @var{value} to a @code{DATETIME}.  A date is promoted with a
+midnight time of day.
 @end defun
 
 @defun to_int value
@@ -10348,16 +10951,24 @@ $ ledger -f expr.dat --format "%(1 + to_int('1'))\n%(2,5 + int(2,5))\n" reg asse
 @end defun
 
 @defun to_mask value
-Convert @var{value} to a mask.  @value{InternalUseOnly}
+Coerce @var{value} to a regex @code{MASK}.  The argument is taken as
+the pattern source.
 @end defun
 
 @defun to_sequence value
-Convert @var{value} to a sequence.  @value{InternalUseOnly}
+Wrap @var{value} as a single-element @code{SEQUENCE} (or return it
+unchanged if it is already one).  Useful when you want a uniform
+sequence type to feed @code{get_at}.
 @end defun
 
 @defun to_string value
 @defunx str value
 Convert @var{value} to a character string.
+@end defun
+
+@defun truncate value
+Round @var{value} toward zero.  Distinct from @code{truncated}, which
+shortens a string for display.
 @end defun
 
 @defun tag tag_name
@@ -10383,8 +10994,11 @@ $ ledger -f expr.dat --now 2015/01/01 --format "%(today)\n" reg assets
 2015/01/01
 @end smallexample
 
-@defun top_amount
-Return the top-level amount.
+@defun top_amount value
+Return the first amount of @var{value} when @var{value} is a balance
+(by commodity sort order) or a sequence.  For a plain amount,
+returns it unchanged.  Used internally by formats that need to lay
+out a balance one commodity at a time.
 @end defun
 
 @defun total_expr
@@ -10407,6 +11021,11 @@ Truncate @var{string} to @var{total_len} ensuring that each account is at least
 @var{account_len} long.
 @end defun
 
+@defvar uncleared
+True if the posting's transaction state is plain (not @samp{*} or
+@samp{!}).  Equivalent to @samp{state == 0}.
+@end defvar
+
 @defun unround
 Remove rounding from an amount.
 @end defun
@@ -10414,6 +11033,11 @@ Remove rounding from an amount.
 @defun unrounded
 Return unrounded version of amount.
 @end defun
+
+@defvar virtual
+True for postings whose account is wrapped in @code{[]} or
+@code{()}; complement of @code{real}.
+@end defvar
 
 @defvar value_date
 The effective date used for valuation when looking up market prices.
