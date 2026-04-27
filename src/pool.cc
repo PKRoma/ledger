@@ -235,12 +235,100 @@ commodity_t* commodity_pool_t::find_or_create(commodity_t& comm, const annotatio
     if (commodity_t* ann_comm = find(comm.base_symbol(), details)) {
       assert(ann_comm->annotated && as_annotated_commodity(*ann_comm).details);
       return ann_comm;
-    } else {
-      return create(comm, details);
     }
+
+    if (commodity_t* fuzzy = find_annotation_fuzzy(comm.base_symbol(), details))
+      return fuzzy;
+
+    return create(comm, details);
   } else {
     return &comm;
   }
+}
+
+/**
+ * @brief Fuzzy-match an annotation against existing annotated commodities.
+ *
+ * When an exact lookup for @p details in @p annotated_commodities fails,
+ * the lookup may still refer to an existing lot whose price is the same
+ * to the user-typed precision but differs at the full GMP rational level.
+ * This arises whenever a total cost divides unevenly (e.g. 23.60 / 23 =
+ * 118/115 ≈ 1.0260869565...), so the computed per-unit lot price carries
+ * more precision than a user who then references the lot by its displayed
+ * value (e.g. {1.026087 EUR}).
+ *
+ * To merge such references with their originating lot, this helper scans
+ * entries with the same base symbol and identical non-price details
+ * (date, tag, value expression, and ANNOTATION_PRICE_FIXATED), and
+ * accepts a candidate whose price matches @p details.price after both are
+ * rounded to the lesser of their quantity precisions.  The fuzzy match is
+ * restricted to crossing the computed/user boundary (one side has
+ * ANNOTATION_PRICE_CALCULATED, the other does not) so that two distinct
+ * user-typed lots remain separate even when their prices would coincide
+ * after rounding.
+ *
+ * Returns the matching commodity when exactly one candidate qualifies,
+ * or nullptr when there is no match (or when multiple candidates tie,
+ * in which case the lookup is ambiguous and falls through to creation).
+ */
+commodity_t* commodity_pool_t::find_annotation_fuzzy(const string& symbol,
+                                                     const annotation_t& details) {
+  if (!details.price || !details.price->has_commodity())
+    return nullptr;
+
+  const bool lookup_is_calc = details.has_flags(ANNOTATION_PRICE_CALCULATED);
+
+  annotated_commodity_t* match = nullptr;
+  bool ambiguous = false;
+
+  for (auto it = annotated_commodities.lower_bound(
+           annotated_commodities_map::key_type(symbol, annotation_t()));
+       it != annotated_commodities.end(); ++it) {
+    if (it->first.first != symbol)
+      break;
+
+    const annotation_t& existing = it->first.second;
+    if (!existing.price || !existing.price->has_commodity())
+      continue;
+    if (existing.price->commodity() != details.price->commodity())
+      continue;
+    if (existing.date != details.date || existing.tag != details.tag)
+      continue;
+    if (existing.value_expr.has_value() != details.value_expr.has_value())
+      continue;
+    if (existing.value_expr && details.value_expr &&
+        existing.value_expr->text() != details.value_expr->text())
+      continue;
+    if ((existing.flags() & ANNOTATION_SEMANTIC_FLAGS) !=
+        (details.flags() & ANNOTATION_SEMANTIC_FLAGS))
+      continue;
+    if (existing.has_flags(ANNOTATION_PRICE_CALCULATED) == lookup_is_calc)
+      continue;
+
+    const int min_prec =
+        static_cast<int>(std::min(details.price->precision(), existing.price->precision()));
+    amount_t rounded_lookup = *details.price;
+    rounded_lookup.in_place_roundto(min_prec);
+    amount_t rounded_existing = *existing.price;
+    rounded_existing.in_place_roundto(min_prec);
+
+    if (rounded_lookup == rounded_existing) {
+      if (match) {
+        ambiguous = true;
+        break;
+      }
+      match = it->second.get();
+    }
+  }
+
+  if (ambiguous)
+    return nullptr;
+  if (match)
+    DEBUG("pool.commodities", "commodity_pool_t::find_annotation_fuzzy matched "
+                                  << "symbol " << symbol << '\n'
+                                  << details << "\nto existing\n"
+                                  << as_annotated_commodity(*match).details);
+  return match;
 }
 
 /**

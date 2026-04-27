@@ -205,6 +205,15 @@ public:
   /// pointer and wants to avoid a redundant symbol lookup.
   commodity_t* find_or_create(commodity_t& comm, const annotation_t& details);
 
+  /// @brief Fuzzy-match an annotation against existing annotated commodities.
+  ///
+  /// Used by find_or_create when an exact lookup fails, to merge
+  /// user-typed references such as `{1.026087 EUR}` with computed lots
+  /// whose per-unit price has more internal precision (e.g. 23.60/23 =
+  /// 118/115 ≈ 1.0260869565...).  Returns the matching commodity when
+  /// exactly one candidate qualifies, or nullptr otherwise.
+  commodity_t* find_annotation_fuzzy(const string& symbol, const annotation_t& details);
+
   /// @brief Create an annotated_commodity_t wrapping @p comm with @p details.
   ///
   /// The base commodity must not already be annotated.  The new annotated
