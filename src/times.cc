@@ -415,7 +415,8 @@ optional<date_t> string_to_relative_date(const std::string& str) {
  * @brief Parse a datetime string using the two built-in datetime formats.
  *
  * Tries "YYYY/MM/DD HH:MM:SS" first, then "MM/DD/YYYY HH:MM:SS"
- * (the timeclock format).  Separators are normalized before parsing.
+ * (the timeclock format).  Separators `.` and `-` are normalized to `/`
+ * before parsing.
  */
 datetime_t parse_datetime(const char* str) {
   if (std::strlen(str) > 127) {
@@ -425,9 +426,10 @@ datetime_t parse_datetime(const char* str) {
   char buf[128];
   std::strcpy(buf, str);
 
-  for (char* p = buf; *p; p++)
+  for (char* p = buf; *p; p++) {
     if (*p == '.' || *p == '-')
       *p = '/';
+  }
 
   datetime_t when = input_datetime_io->parse(buf);
   if (when.is_not_a_date_time()) {
@@ -437,6 +439,34 @@ datetime_t parse_datetime(const char* str) {
     }
   }
   return when;
+}
+
+/**
+ * @brief Attempt to parse a datetime string, returning none on failure.
+ *
+ * Non-throwing parser for inputs that may carry a time component.  A datetime
+ * is recognized structurally as `<date><sep><time>`, where `sep` is a space
+ * or `@` (the latter avoids shell quoting in forms like "2018/12/16@08:12").
+ * Strings without such a separator -- plain dates, period expressions, and
+ * relative-date keywords -- return none immediately, sparing the common case
+ * a wasted parse-and-throw cycle.  When a separator is present, the date and
+ * time portions are parsed independently and combined.
+ */
+optional<datetime_t> try_parse_datetime(const std::string& str) {
+  if (str.size() > 127)
+    return none;
+
+  std::string::size_type sep = str.find_first_of(" @");
+  if (sep == std::string::npos)
+    return none;
+
+  try {
+    date_t day = parse_date(str.substr(0, sep).c_str());
+    time_duration_t tod = posix_time::duration_from_string(str.substr(sep + 1));
+    return datetime_t(day, tod);
+  } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+    return none;
+  }
 }
 
 /// @brief Parse a date string using the registered format cascade.

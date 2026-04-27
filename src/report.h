@@ -598,6 +598,18 @@ public:
 
   OPTION_(
       report_t, begin_, DO_() { // -b
+        // If the argument carries a time component (e.g. "2018/12/16 08:12:33"
+        // or "2018/12/16@08:12:33"), filter by the full datetime so that
+        // timelog sessions or intra-day events can be bounded precisely.
+        if (optional<datetime_t> begin_dt = try_parse_datetime(str)) {
+          OTHER(limit_).on(whence, "datetime>=to_datetime(\"" +
+                                       format_datetime(*begin_dt, FMT_WRITTEN) + "\")");
+          date_t begin_date = begin_dt->date();
+          if (!parent->origin || begin_date < *parent->origin)
+            parent->origin = begin_date;
+          return;
+        }
+
         date_interval_t interval(str);
         if (optional<date_t> begin = interval.begin()) {
           // When no explicit year was given (e.g. "-b 10/01" or "-b Oct"),
@@ -830,6 +842,18 @@ public:
 
   OPTION_(
       report_t, end_, DO_() { // -e
+        // If the argument carries a time component (e.g. "2018/12/16 08:12:33"
+        // or "2018/12/16@08:12:33"), filter by the full datetime.  This lets
+        // users restrict timelog sessions, or market-value snapshots, to a
+        // precise instant instead of a whole-day boundary.
+        if (optional<datetime_t> end_dt = try_parse_datetime(str)) {
+          OTHER(limit_).on(whence, "datetime<to_datetime(\"" +
+                                       format_datetime(*end_dt, FMT_WRITTEN) + "\")");
+          // The instant itself is excluded, so value prices one second earlier.
+          parent->terminus = *end_dt - seconds(1);
+          return;
+        }
+
         // Use begin() here so that if the user says --end=2008, we end on
         // 2008/01/01 instead of 2009/01/01 (which is what end() would
         // return).
@@ -1010,6 +1034,13 @@ public:
 
   OPTION_(
       report_t, now_, DO_() {
+        // Accept a full datetime (e.g. "2018/12/16 08:12:33" or
+        // "2018/12/16@08:12:33") so that the report epoch can be pinned to a
+        // precise instant -- useful with sub-daily price entries.
+        if (optional<datetime_t> when = try_parse_datetime(str)) {
+          ledger::epoch = parent->terminus = *when;
+          return;
+        }
         date_interval_t interval(str);
         if (optional<date_t> begin = interval.begin()) {
           ledger::epoch = parent->terminus = datetime_t(*begin);

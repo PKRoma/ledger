@@ -185,6 +185,17 @@ inline datetime_t parse_datetime(const std::string& str) {
 }
 
 /**
+ * @brief Non-throwing parser for inputs that may carry a time component.
+ *
+ * Used by options like `--begin`, `--end`, and `--now` that accept either a
+ * plain date or a full datetime.  A datetime is recognized structurally as
+ * `<date><sep><time>` where `sep` is a space or `@`; inputs without such a
+ * separator return none without attempting a parse, so plain dates and
+ * period expressions short-circuit cheaply.
+ */
+optional<datetime_t> try_parse_datetime(const std::string& str);
+
+/**
  * @brief Parse a date string using the registered reader formats.
  *
  * The function tries each registered date format (including any custom
