@@ -165,7 +165,8 @@ public:
     TRACE_CTOR(item_t, "flags_t, const string&");
   }
   item_t(const item_t& item)
-      : supports_flags<uint_least16_t>(item), scope_t(), parent(nullptr), defining_(false) {
+      : supports_flags<uint_least16_t>(item), metadata_t(item), scope_t(), parent(nullptr),
+        defining_(false) {
     copy_details(item);
     TRACE_CTOR(item_t, "copy");
   }
