@@ -185,11 +185,13 @@ inline datetime_t parse_datetime(const std::string& str) {
 }
 
 /**
- * @brief Attempt to parse a datetime, returning none on failure.
+ * @brief Non-throwing parser for inputs that may carry a time component.
  *
- * Non-throwing variant of `parse_datetime()`: callers that accept either
- * a date or a full datetime (e.g. `--begin`, `--end`, `--now`) use this
- * to branch on the richer form without catching exceptions themselves.
+ * Used by options like `--begin`, `--end`, and `--now` that accept either a
+ * plain date or a full datetime.  A datetime is recognized structurally as
+ * `<date><sep><time>` where `sep` is a space or `@`; inputs without such a
+ * separator return none without attempting a parse, so plain dates and
+ * period expressions short-circuit cheaply.
  */
 optional<datetime_t> try_parse_datetime(const std::string& str);
 
