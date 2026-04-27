@@ -2050,8 +2050,7 @@ void amount_t::print(std::ostream& _out, const uint_least8_t flags) const {
   // at precision 0 when the inference happened but a later transaction
   // bumped it to 2), normal display via that precision is what the
   // user expects.
-  if (comm && quantity->has_flags(BIGINT_COST_PREC) &&
-      quantity->prec > commodity().precision()) {
+  if (comm && quantity->has_flags(BIGINT_COST_PREC) && quantity->prec > commodity().precision()) {
     bool widen = false;
     if (commodity().precision() == 0) {
       widen = true;
