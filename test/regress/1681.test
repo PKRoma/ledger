@@ -1,0 +1,64 @@
+; Regression test for GitHub issue #1681
+;
+; Feature request: allow an `account` directive's `;`-prefixed comment lines
+; to declare metadata tags that are then reachable from balance-format
+; expressions through `tag()`, `meta()`, `has_tag()`, and `has_meta()`.
+;
+; Before this change the account lookup() dispatcher had no tag bindings and
+; account_t had no metadata storage, so a balance format like
+; `%(tag("Contribution"))` failed with "Unknown identifier 'tag'".
+
+account Assets:Budget
+    ; Category: Monthly
+
+account Assets:Budget:Food
+    ; Contribution: 50 EUR
+    ; Target: 100 EUR
+    ; :Important:
+
+account Assets:Budget:Housing
+    ; Contribution: 500 EUR
+    ; Target: 800 EUR
+
+2024/01/01 Opening
+    Assets:Budget:Food         25 EUR
+    Assets:Budget:Housing     200 EUR
+    Equity:Opening
+
+; Tag retrieval through the balance format.  Each displayed leaf account
+; carries its own Contribution/Target metadata, and the sub-total row for
+; Assets:Budget correctly reports no Contribution of its own.
+test bal --no-total --balance-format "%(partial_account)  C=%(tag(\"Contribution\"))  T=%(tag(\"Target\"))\n" ^Assets
+Assets:Budget  C=  T=
+Food  C=50 EUR  T=100 EUR
+Housing  C=500 EUR  T=800 EUR
+end test
+
+; `meta()` is the long-form alias for `tag()` and must return the same value.
+test bal --no-total --balance-format "%(partial_account)  M=%(meta(\"Target\"))\n" Food
+Assets:Budget:Food  M=100 EUR
+end test
+
+; Bare tags set with the `:name:` syntax are detectable via has_tag/has_meta
+; even though they have no associated value.
+test bal --no-total --balance-format "%(partial_account)  imp=%(has_tag(\"Important\"))  hm=%(has_meta(\"Important\"))\n" ^Assets
+Assets:Budget  imp=false  hm=false
+Food  imp=true  hm=true
+Housing  imp=false  hm=false
+end test
+
+; Tag inheritance: Food and Housing inherit `Category: Monthly` from their
+; parent Assets:Budget, which is itself a declared account with metadata.
+test bal --no-total --balance-format "%(partial_account)  cat=%(tag(\"Category\"))\n" ^Assets
+Assets:Budget  cat=Monthly
+Food  cat=Monthly
+Housing  cat=Monthly
+end test
+
+; Regex lookups work the same way they do for postings: a mask matches
+; both the Contribution and Target tag names.
+test bal --no-total --balance-format "%(partial_account)  any=%(has_tag(/^(Contribution|Target)$/))\n" ^Assets
+Assets:Budget  any=false
+Food  any=true
+Housing  any=true
+end test

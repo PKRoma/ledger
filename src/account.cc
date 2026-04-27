@@ -295,6 +295,43 @@ std::ostream& operator<<(std::ostream& out, const account_t& account) {
   return out;
 }
 
+/*--- Metadata Operations (parent-walking inheritance) ---*/
+
+bool account_t::has_tag(const string& tag, bool inherit) const {
+  if (metadata_t::has_tag(tag))
+    return true;
+  if (inherit && parent && parent->parent)
+    return parent->has_tag(tag, inherit);
+  return false;
+}
+
+bool account_t::has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask,
+                        bool inherit) const {
+  if (metadata_t::has_tag(tag_mask, value_mask))
+    return true;
+  if (inherit && parent && parent->parent)
+    return parent->has_tag(tag_mask, value_mask, inherit);
+  return false;
+}
+
+std::optional<value_t> account_t::get_tag(const string& tag, bool inherit) const {
+  if (std::optional<value_t> v = metadata_t::get_tag(tag))
+    return v;
+  if (inherit && parent && parent->parent)
+    return parent->get_tag(tag, inherit);
+  return std::nullopt;
+}
+
+std::optional<value_t> account_t::get_tag(const mask_t& tag_mask,
+                                          const std::optional<mask_t>& value_mask,
+                                          bool inherit) const {
+  if (std::optional<value_t> v = metadata_t::get_tag(tag_mask, value_mask))
+    return v;
+  if (inherit && parent && parent->parent)
+    return parent->get_tag(tag_mask, value_mask, inherit);
+  return std::nullopt;
+}
+
 /*--- Expression Bindings ---*/
 
 namespace {
@@ -364,6 +401,14 @@ value_t get_depth(account_t& account) {
 
 value_t get_note(account_t& account) {
   return account.note ? string_value(*account.note) : NULL_VALUE;
+}
+
+value_t account_has_tag(call_scope_t& args) {
+  return metadata_has_tag(args.context<account_t>(), args);
+}
+
+value_t account_get_tag(call_scope_t& args) {
+  return metadata_get_tag(args.context<account_t>(), args);
 }
 
 value_t ignore(account_t&) {
@@ -546,6 +591,13 @@ expr_t::ptr_op_t account_t::lookup(const symbol_t::kind_t kind, const string& fn
   case 'h':
     if (fn_name == "has_children_to_display")
       return WRAP_FUNCTOR(get_wrapper<&get_has_children_to_display>);
+    else if (fn_name == "has_tag" || fn_name == "has_meta")
+      return WRAP_FUNCTOR(account_has_tag);
+    break;
+
+  case 'm':
+    if (fn_name == "meta")
+      return WRAP_FUNCTOR(account_get_tag);
     break;
 
   case 'i':
@@ -588,7 +640,9 @@ expr_t::ptr_op_t account_t::lookup(const symbol_t::kind_t kind, const string& fn
     break;
 
   case 't':
-    if (fn_name == "total")
+    if (fn_name == "tag")
+      return WRAP_FUNCTOR(account_get_tag);
+    else if (fn_name == "total")
       return WRAP_FUNCTOR(get_wrapper<&get_total>);
     break;
 

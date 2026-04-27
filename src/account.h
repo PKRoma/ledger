@@ -61,6 +61,7 @@
 
 #include <limits>
 
+#include "metadata.h"
 #include "scope.h"
 #include "types.h"
 
@@ -88,7 +89,7 @@ using deferred_posts_map_t = std::map<string, posts_list>;
  * as the evaluation context, giving expressions access to the account's
  * name, depth, totals, and statistics through the lookup() dispatch table.
  */
-class account_t : public flags::supports_flags<>, public scope_t {
+class account_t : public flags::supports_flags<>, public metadata_t, public scope_t {
 #define ACCOUNT_NORMAL 0x00 ///< No special flags; an ordinary user-defined account.
 #define ACCOUNT_KNOWN                                                                              \
   0x01 ///< Account was declared with the `account` directive (for --strict/--pedantic validation).
@@ -112,7 +113,7 @@ public:
 
   account_t(account_t* _parent = nullptr, const string& _name = "",
             const optional<string>& _note = none)
-      : supports_flags<>(), scope_t(), parent(_parent), name(_name), note(_note),
+      : supports_flags<>(), metadata_t(), scope_t(), parent(_parent), name(_name), note(_note),
         depth(static_cast<unsigned short>(parent ? parent->depth + 1 : 0)) {
     if (parent && parent->depth == std::numeric_limits<unsigned short>::max())
       throw std::runtime_error("Account hierarchy too deep");
@@ -120,10 +121,11 @@ public:
   }
   // Note: copy is intentionally shallow — posts and deferred_posts are
   // NOT copied. The copy shares the same parent and children map but
-  // has an independent (empty) posting history.
+  // has an independent (empty) posting history.  Metadata is copied via
+  // the metadata_t copy constructor.
   account_t(const account_t& other)
-      : supports_flags<>(other.flags()), scope_t(), parent(other.parent), name(other.name),
-        note(other.note), depth(other.depth), accounts(other.accounts) {
+      : supports_flags<>(other.flags()), metadata_t(other), scope_t(), parent(other.parent),
+        name(other.name), note(other.note), depth(other.depth), accounts(other.accounts) {
     TRACE_CTOR(account_t, "copy");
   }
   account_t& operator=(const account_t&) = default;
@@ -229,6 +231,35 @@ public:
 
   posts_list::iterator posts_begin() { return posts.begin(); }
   posts_list::iterator posts_end() { return posts.end(); }
+
+  /**
+   * @brief Tag lookup with parent-account inheritance.
+   *
+   * Overrides metadata_t::has_tag / metadata_t::get_tag so that, when
+   * the tag is not present on this account and @p inherit is true, the
+   * search walks up the parent chain.  The walk stops one level above
+   * the root (an account whose grandparent is null is the master
+   * account, which never carries directive-supplied metadata).
+   */
+  bool has_tag(const string& tag, bool inherit = true) const override;
+  bool has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask = {},
+               bool inherit = true) const override;
+
+  std::optional<value_t> get_tag(const string& tag, bool inherit = true) const override;
+  std::optional<value_t> get_tag(const mask_t& tag_mask,
+                                 const std::optional<mask_t>& value_mask = {},
+                                 bool inherit = true) const override;
+
+  /**
+   * @brief Parse `:tag:` and `Key:` metadata from an account-directive comment.
+   *
+   * Accounts have no dates, so this is a thin wrapper around
+   * metadata_t::parse_metadata_tags binding @c *this as the
+   * `Key:: expr` evaluation target.
+   */
+  void parse_tags(const char* p, scope_t& scope, bool overwrite_existing = true) {
+    parse_metadata_tags(p, scope, *this, overwrite_existing);
+  }
 
   /**
    * @brief Dispatch table for expression function lookups.

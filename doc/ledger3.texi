@@ -2395,6 +2395,23 @@ The example above declares @samp{Income}, @samp{Income:Salary},
 @samp{Income:Apps}, @samp{Income:Apps:Android},
 @samp{Income:Apps:iPhone}, and @samp{Income:Rent}.
 
+Comment lines that follow an @code{account} directive may also declare
+metadata tags for the account, using the same @samp{Key: value} and
+@samp{:tag:} syntaxes accepted inside transactions:
+
+@smallexample @c input:validate
+account Assets:Budget:Food
+    ; Contribution: 50 EUR
+    ; Target: 100 EUR
+    ; :Important:
+@end smallexample
+
+These tags are reachable from any account-context expression -- most
+usefully from a @command{balance} format string -- through the
+@code{tag}, @code{meta}, @code{has_tag}, and @code{has_meta} functions.
+Tag lookups walk up the account hierarchy, so a tag declared on a
+parent account is inherited by its children unless they redeclare it.
+
 @item apply account
 @findex apply account
 @c instance_t::master_account_directive

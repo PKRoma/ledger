@@ -32,6 +32,7 @@ set(LEDGER_SOURCES
   xact.cc
   post.cc
   item.cc
+  metadata.cc
   format.cc
   query.cc
   scope.cc
@@ -108,6 +109,7 @@ set(LEDGER_INCLUDES
   journal.h
   lookup.h
   mask.h
+  metadata.h
   op.h
   option.h
   output.h

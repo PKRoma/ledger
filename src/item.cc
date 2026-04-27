@@ -37,8 +37,9 @@
  *
  * @brief  Implementation of item_t -- the base class for all journal items.
  *
- * This file implements the metadata system (has_tag, get_tag, set_tag,
- * parse_tags), the expression-engine bindings (lookup), and utility
+ * The metadata storage, lookups, and `:tag:` / `Key:` parser live in
+ * metadata.cc.  This file implements the date-aware parse_tags
+ * extension, the expression-engine bindings (lookup), and utility
  * functions for printing and serializing journal items.
  */
 
@@ -55,179 +56,22 @@ namespace ledger {
 bool item_t::use_aux_date = false;
 
 /*----------------------------------------------------------------------*/
-/*  Metadata Operations                                                 */
+/*  Tag Parsing (date extension)                                        */
 /*                                                                      */
-/*  The metadata map uses a case-insensitive comparator so that tags    */
-/*  like "Payee", "payee", and "PAYEE" all resolve to the same entry.   */
-/*  Lookups by exact string use the map's find(); lookups by regex      */
-/*  iterate over all entries.                                           */
+/*  Items extend the base parser with a leading bracketed-date form     */
+/*  `[date]` or `[date=auxdate]`.  Everything else is delegated to      */
+/*  metadata_t::parse_metadata_tags.                                    */
 /*----------------------------------------------------------------------*/
 
-bool item_t::has_tag(const string& tag, bool) const {
-  DEBUG("item.meta", "Checking if item has tag: " << tag);
-  if (!metadata) {
-    DEBUG("item.meta", "Item has no metadata at all");
-    return false;
-  }
-  string_map::const_iterator i = metadata->find(tag);
-#if DEBUG_ON
-  if (SHOW_DEBUG("item.meta")) {
-    if (i == metadata->end())
-      DEBUG("item.meta", "Item does not have this tag");
-    else
-      DEBUG("item.meta", "Item has the tag!");
-  }
-#endif
-  return i != metadata->end();
-}
-
-bool item_t::has_tag(const mask_t& tag_mask, const std::optional<mask_t>& value_mask, bool) const {
-  if (metadata) {
-    for (const string_map::value_type& data : *metadata) {
-      if (tag_mask.match(data.first)) {
-        if (!value_mask)
-          return true;
-        else if (data.second.first)
-          return value_mask->match(data.second.first->to_string());
-      }
-    }
-  }
-  return false;
-}
-
-std::optional<value_t> item_t::get_tag(const string& tag, bool) const {
-  DEBUG("item.meta", "Getting item tag: " << tag);
-  if (metadata) {
-    DEBUG("item.meta", "Item has metadata");
-    string_map::const_iterator i = metadata->find(tag);
-    if (i != metadata->end()) {
-      DEBUG("item.meta", "Found the item!");
-      return (*i).second.first;
-    }
-  }
-  return std::nullopt;
-}
-
-std::optional<value_t> item_t::get_tag(const mask_t& tag_mask,
-                                       const std::optional<mask_t>& value_mask, bool) const {
-  if (metadata) {
-    for (const string_map::value_type& data : *metadata) {
-      if (tag_mask.match(data.first) &&
-          (!value_mask ||
-           (data.second.first && value_mask->match(data.second.first->to_string())))) {
-        return data.second.first;
-      }
-    }
-  }
-  return std::nullopt;
-}
-
-namespace {
-/**
- * @brief Case-insensitive ordering for metadata tag names.
- *
- * Used as the comparator for item_t::string_map so that metadata
- * lookups are case-insensitive.  For example, a tag set as "Payee"
- * can be retrieved via has_tag("payee") or get_tag("PAYEE").
- * Delegates to Boost's ilexicographical_compare for locale-aware
- * case-folded ordering.
- */
-struct CaseInsensitiveKeyCompare
-#if __cplusplus < 201103L
-    : public std::binary_function<string, string, bool>
-#endif
-{
-  bool operator()(const string& s1, const string& s2) const {
-    return boost::algorithm::ilexicographical_compare(s1, s2);
-  }
-};
-} // namespace
-
-/**
- * @brief Set or overwrite a metadata tag, creating the map if needed.
- *
- * When the metadata map does not yet exist, it is initialized with a
- * CaseInsensitiveKeyCompare comparator.  Null or empty-string values
- * are normalized to std::nullopt (stored as a valueless tag).
- */
-item_t::string_map::iterator item_t::set_tag(const string& tag, const std::optional<value_t>& value,
-                                             const bool overwrite_existing) {
-  assert(!tag.empty());
-
-  if (!metadata)
-    metadata = string_map(CaseInsensitiveKeyCompare());
-
-  DEBUG("item.meta", "Setting tag '" << tag << "' to value '"
-                                     << (value ? *value : string_value("<none>")) << "'");
-
-  std::optional<value_t> data = value;
-  if (data && (data->is_null() || (data->is_string() && data->as_string().empty())))
-    data = std::nullopt;
-
-  string_map::iterator i = metadata->find(tag);
-  if (i == metadata->end()) {
-    DEBUG("item.meta", "Setting new metadata value");
-    auto [iter, inserted] = metadata->insert(string_map::value_type(tag, tag_data_t(data, false)));
-    assert(inserted);
-    return iter;
-  } else {
-    DEBUG("item.meta", "Found old metadata value");
-    if (overwrite_existing) {
-      DEBUG("item.meta", "Overwriting old metadata value");
-      (*i).second = tag_data_t(data, false);
-    }
-    return i;
-  }
-}
-
-/*----------------------------------------------------------------------*/
-/*  Tag Parsing                                                         */
-/*                                                                      */
-/*  Comment lines (`;`-prefixed) are scanned for structured metadata.   */
-/*  Three syntaxes are recognized:                                      */
-/*    1. [date=auxdate] -- bracketed date override                      */
-/*    2. :tag1:tag2:    -- colon-delimited bare tags                    */
-/*    3. Key: value     -- key/value metadata (first token with `:`)    */
-/*    4. Key:: expr     -- like Key: but value is an evaluated expr     */
-/*----------------------------------------------------------------------*/
-
-/**
- * @brief Parse metadata tags from a single comment line.
- *
- * This function extracts structured metadata from comment text.  It
- * handles three distinct syntaxes:
- *
- * **Bracketed dates** `[date]` or `[date=auxdate]`:
- *   If the text contains `[` followed by a digit or `=`, the content
- *   between brackets is parsed as a date override.  The part before
- *   `=` sets the primary date; the part after `=` sets the auxiliary
- *   (effective) date.  This allows postings to carry dates different
- *   from their parent transaction.
- *
- * **Colon-delimited tags** `:tag1:tag2:tag3:`:
- *   A token beginning and ending with `:` is split on `:` to produce
- *   multiple bare (valueless) tags in one comment line.
- *
- * **Key/value metadata** `Key: value` or `Key:: expr`:
- *   The first whitespace-delimited token ending with `:` names the key.
- *   Everything after it is the value.  With a single colon the value
- *   is stored as a string; with a double colon (`::`) the value is
- *   parsed and evaluated as an expression in the current scope.
- *
- * Only the first key/value pair per line is parsed (the function
- * breaks after finding it).  Multiple bare tags on the same line
- * are all recorded.
- */
 void item_t::parse_tags(const char* p, scope_t& scope, bool overwrite_existing) {
-  // Skip any additional leading `;` characters (with interleaved whitespace).
-  // The first `;` has already been consumed by the caller in textual_xacts.cc,
-  // but comments written as `;;Key: value` or `;  ;Key: value` would otherwise
-  // see the extra semicolon glom onto the tag name (fixes #1786).  Treat a run
-  // of leading semicolons as an extended comment prefix.
-  while (*p == ' ' || *p == '\t' || *p == ';')
-    ++p;
+  // Skip any additional leading `;` characters (with interleaved whitespace)
+  // before scanning for `[date]`.  `parse_metadata_tags` repeats this skip
+  // so the colon parser sees the same starting position.
+  const char* d = p;
+  while (*d == ' ' || *d == '\t' || *d == ';')
+    ++d;
 
-  if (const char* b = std::strchr(p, '[')) {
+  if (const char* b = std::strchr(d, '[')) {
     if (*(b + 1) != '\0' &&
         (std::isdigit(static_cast<unsigned char>(*(b + 1))) || *(b + 1) == '=')) {
       if (const char* e = std::strchr(b, ']')) {
@@ -245,64 +89,7 @@ void item_t::parse_tags(const char* p, scope_t& scope, bool overwrite_existing) 
     }
   }
 
-  if (!std::strchr(p, ':'))
-    return;
-
-  string str(p);
-  string::size_type pos = 0;
-
-  string tag;
-  bool by_value = false;
-  bool first = true;
-
-  while (pos < str.length()) {
-    pos = str.find_first_not_of(" \t", pos);
-    if (pos == string::npos)
-      break;
-
-    string::size_type end = str.find_first_of(" \t", pos);
-    if (end == string::npos)
-      end = str.length();
-
-    string token = str.substr(pos, end - pos);
-    if (token.length() < 2) {
-      pos = end;
-      continue;
-    }
-
-    if (token[0] == ':' && token[token.length() - 1] == ':') { // a series of tags
-      string tag_str(token, 1, token.length() - 2);
-      std::vector<string> tag_names;
-      boost::split(tag_names, tag_str, boost::is_any_of(":"));
-      for (const string& tag_name : tag_names) {
-        if (!tag_name.empty()) {
-          string_map::iterator i = set_tag(tag_name, std::nullopt, overwrite_existing);
-          (*i).second.second = true;
-        }
-      }
-    } else if (first && token[token.length() - 1] == ':') { // a metadata setting
-      std::size_t index = 1;
-      if (token[token.length() - 2] == ':') {
-        by_value = true;
-        index = 2;
-      }
-      tag = token.substr(0, token.length() - index);
-
-      string_map::iterator i;
-      string field(p + end); // NOLINT(bugprone-unused-local-non-trivial-variable)
-      trim(field);
-      if (by_value) {
-        bind_scope_t bound_scope(scope, *this);
-        i = set_tag(tag, expr_t(field).calc(bound_scope), overwrite_existing);
-      } else {
-        i = set_tag(tag, string_value(field), overwrite_existing);
-      }
-      (*i).second.second = true;
-      break;
-    }
-    first = false;
-    pos = end;
-  }
+  parse_metadata_tags(p, scope, *this, overwrite_existing);
 }
 
 void item_t::append_note(const char* p, scope_t& scope, bool overwrite_existing) {
@@ -359,58 +146,12 @@ value_t get_note(item_t& item) {
   return item.note ? string_value(*item.note) : NULL_VALUE;
 }
 
-value_t has_tag(call_scope_t& args) {
-  item_t& item(find_scope<item_t>(args));
-
-  if (args.size() == 1) {
-    if (args[0].is_string())
-      return item.has_tag(args.get<string>(0));
-    else if (args[0].is_mask())
-      return item.has_tag(args.get<mask_t>(0));
-    else
-      throw_(std::runtime_error,
-             _f("Expected string or mask for argument 1, but received %1%") % args[0].label());
-  } else if (args.size() == 2) {
-    if (args[0].is_mask() && args[1].is_mask())
-      return item.has_tag(args.get<mask_t>(0), args.get<mask_t>(1));
-    else
-      throw_(std::runtime_error,
-             _f("Expected masks for arguments 1 and 2, but received %1% and %2%") %
-                 args[0].label() % args[1].label());
-  } else if (args.size() == 0) {
-    throw_(std::runtime_error, _("Too few arguments to function"));
-  } else {
-    throw_(std::runtime_error, _("Too many arguments to function"));
-  }
-  return false;
+value_t item_has_tag(call_scope_t& args) {
+  return metadata_has_tag(find_scope<item_t>(args), args);
 }
 
-value_t get_tag(call_scope_t& args) {
-  item_t& item(find_scope<item_t>(args));
-  std::optional<value_t> val;
-
-  if (args.size() == 1) {
-    if (args[0].is_string())
-      val = item.get_tag(args.get<string>(0));
-    else if (args[0].is_mask())
-      val = item.get_tag(args.get<mask_t>(0));
-    else
-      throw_(std::runtime_error,
-             _f("Expected string or mask for argument 1, but received %1%") % args[0].label());
-  } else if (args.size() == 2) {
-    if (args[0].is_mask() && args[1].is_mask())
-      val = item.get_tag(args.get<mask_t>(0), args.get<mask_t>(1));
-    else
-      throw_(std::runtime_error,
-             _f("Expected masks for arguments 1 and 2, but received %1% and %2%") %
-                 args[0].label() % args[1].label());
-  } else if (args.size() == 0) {
-    throw_(std::runtime_error, _("Too few arguments to function"));
-  } else {
-    throw_(std::runtime_error, _("Too many arguments to function"));
-  }
-
-  return val ? *val : NULL_VALUE;
+value_t item_get_tag(call_scope_t& args) {
+  return metadata_get_tag(find_scope<item_t>(args), args);
 }
 
 value_t get_pathname(item_t& item) {
@@ -620,10 +361,8 @@ expr_t::ptr_op_t item_t::lookup(const symbol_t::kind_t kind, const string& name)
     break;
 
   case 'h':
-    if (name == "has_tag")
-      return WRAP_FUNCTOR(ledger::has_tag);
-    else if (name == "has_meta")
-      return WRAP_FUNCTOR(ledger::has_tag);
+    if (name == "has_tag" || name == "has_meta")
+      return WRAP_FUNCTOR(item_has_tag);
     break;
 
   case 'i':
@@ -635,7 +374,7 @@ expr_t::ptr_op_t item_t::lookup(const symbol_t::kind_t kind, const string& name)
 
   case 'm':
     if (name == "meta")
-      return WRAP_FUNCTOR(ledger::get_tag);
+      return WRAP_FUNCTOR(item_get_tag);
     break;
 
   case 'n':
@@ -661,7 +400,7 @@ expr_t::ptr_op_t item_t::lookup(const symbol_t::kind_t kind, const string& name)
 
   case 't':
     if (name == "tag")
-      return WRAP_FUNCTOR(ledger::get_tag);
+      return WRAP_FUNCTOR(item_get_tag);
     break;
 
   case 'u':
@@ -804,25 +543,6 @@ string item_context(const item_t& item, const string& desc) {
   print_item(out, item, "> ");
 
   return out.str();
-}
-
-/**
- * @brief Serialize metadata tags into a property tree for XML/JSON output.
- *
- * Valueless tags are written as `<tag>name</tag>` elements.  Key/value
- * pairs are written as `<value key="name">...</value>` elements with
- * the value serialized by put_value().
- */
-void put_metadata(property_tree::ptree& st, const item_t::string_map& metadata) {
-  for (const item_t::string_map::value_type& pair : metadata) {
-    if (pair.second.first) {
-      property_tree::ptree& vt(st.add("value", ""));
-      vt.put("<xmlattr>.key", pair.first);
-      put_value(vt, *pair.second.first);
-    } else {
-      st.add("tag", pair.first);
-    }
-  }
 }
 
 } // namespace ledger
