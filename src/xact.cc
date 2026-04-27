@@ -194,13 +194,19 @@ struct add_balancing_post {
 
   void set_cost_prec_if_needed(amount_t& amt) {
     commodity_t& comm = amt.commodity();
-    if (comm.precision() > 0)
-      return;
-    // The commodity's display precision is 0 (never saw an explicit
-    // amount for it).  Scan postings for an inline cost that uses
-    // this commodity and recover the per-unit cost precision, then
-    // check whether the auto-balanced amount actually has meaningful
-    // fractional digits at that precision.
+    // Scan postings for an inline cost that uses this commodity and
+    // recover the per-unit cost precision.  Tag the inferred amount
+    // with BIGINT_COST_PREC whenever the recovered precision exceeds
+    // the commodity's current display precision; amount_t::is_zero()
+    // and ::print() decide at display time whether the flag actually
+    // affects output, based on the commodity's display precision *at
+    // that time* and on whether the value would otherwise be rendered
+    // as zero (issue #1692).  Deferring the policy to display time is
+    // necessary because the commodity's display precision can grow
+    // after this call -- a later transaction may parse an explicit
+    // amount of the same commodity, bumping its precision (the
+    // pattern in test/regress/BFD3FBE1.test, where EUR is established
+    // at precision 2 only by the second transaction).
     for (auto& post : xact.posts) {
       if (post->cost && post->amount) {
         const amount_t& cost = *post->cost;
@@ -208,7 +214,7 @@ struct add_balancing_post {
           auto cost_prec = cost.precision();
           auto amt_prec = post->amount.precision();
           auto price_prec = cost_prec > amt_prec ? cost_prec - amt_prec : cost_prec;
-          if (price_prec > 0) {
+          if (price_prec > comm.precision()) {
             amount_t rounded(amt);
             rounded.in_place_roundto(price_prec);
             if (amt != rounded)
