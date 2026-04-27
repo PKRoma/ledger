@@ -21,8 +21,11 @@ endforeach()
 
 # 2. Run the test suite with profiling enabled.
 execute_process(
+  # %m gives one profraw file per instrumented binary (atomic-merged via
+  # file lock across processes), instead of %p's one-file-per-PID, which
+  # explodes to thousands of files and several GB on a full ctest run.
   COMMAND "${CMAKE_COMMAND}" -E env
-          "LLVM_PROFILE_FILE=${BINDIR}/coverage-%p.profraw"
+          "LLVM_PROFILE_FILE=${BINDIR}/coverage-%m.profraw"
           "${CMAKE_CTEST_COMMAND}" --output-on-failure
   WORKING_DIRECTORY "${BINDIR}"
   RESULT_VARIABLE _ctest_result
