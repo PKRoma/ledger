@@ -1,0 +1,29 @@
+; Regression test for issue #3187:
+; Cost basis was rounded to integer when the dollar commodity never appeared
+; as a posting amount (only as `@`/`@@` price annotations).  Without any
+; explicit USD posting, USD's display precision stays at 0, and the computed
+; basis (e.g. 20 ETH * $5.025 = $100.500) was being rounded to $100.
+;
+; in_place_round_to_commodity_precision now leaves keep_precision in place
+; when the commodity precision is 0 and the value has fractional digits, so
+; the unrounded value flows through to display.
+
+2026-04-21 * Swap
+    Assets        -10 BTC @ $10.05
+    Assets         20 ETH @ $5.025
+
+test --limit "commodity == 'ETH'" --basis balance Assets
+              $100.5  Assets
+end test
+
+test --limit "commodity == 'BTC'" --basis balance Assets
+             $-100.5  Assets
+end test
+
+; Adding `--unround` is the workaround the original report mentions; it should
+; produce the same result now that --basis no longer rounds away the
+; fractional digits when the commodity has no declared precision.
+
+test --limit "commodity == 'ETH'" --unround --basis balance Assets
+              $100.5  Assets
+end test

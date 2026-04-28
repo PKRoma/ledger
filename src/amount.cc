@@ -955,6 +955,13 @@ void amount_t::in_place_round_to_commodity_precision() {
         set_keep_precision(false);
       return;
     }
+    // When the commodity has not been observed at any specific precision
+    // (comm_prec == 0) but the value carries non-trivial fractional digits
+    // (e.g. a --basis cost computed from `@ $5.025`), keep the precision
+    // flag so that display preserves the actual value rather than
+    // truncating it to the integer commodity precision (#3187).
+    if (comm_prec == 0 && keep_precision() && quantity->prec > 0)
+      return;
   }
 
   if (keep_precision()) {
