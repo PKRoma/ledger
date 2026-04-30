@@ -1,0 +1,41 @@
+; Test that --empty respects the query/--limit predicate when admitting
+; declared-but-unused accounts.  An `account` directive for an unrelated
+; account must not surface in `bal -E Assets`; the `Assets` filter has
+; to apply to KNOWN+empty accounts as well.
+
+account Liabilities:C
+
+2026/04/01 * Balance
+    Assets:A                                  €10.00
+    Assets:B                                   €0.00
+    Equity
+
+test bal -E Assets
+              €10.00  Assets
+              €10.00    A
+               €0.00    B
+--------------------
+              €10.00
+end test
+
+test bal -E Liabilities
+                   0  Liabilities:C
+end test
+
+test bal -E
+              €10.00  Assets
+              €10.00    A
+               €0.00    B
+             €-10.00  Equity
+                   0  Liabilities:C
+--------------------
+                   0
+end test
+
+test bal -E --limit "account =~ /Assets/"
+              €10.00  Assets
+              €10.00    A
+               €0.00    B
+--------------------
+              €10.00
+end test

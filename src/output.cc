@@ -280,9 +280,22 @@ std::pair<std::size_t, std::size_t> format_accounts::mark_accounts(account_t& ac
   DEBUG("account.display", "  it has " << to_display << " children to display");
 #endif
 
+  // For declared-but-unused accounts admitted only by --empty, also require
+  // that the query/--limit predicate match the account.  Otherwise an
+  // `account` directive for an unrelated account (e.g. `Liabilities:C`)
+  // would surface in `bal -E Assets`, ignoring the `Assets` filter.  Visited
+  // accounts have already been filtered upstream by filter_posts.
+  auto known_empty_admit = [&]() -> bool {
+    if (!report.HANDLED(empty) || !account.has_flags(ACCOUNT_KNOWN))
+      return false;
+    if (!report.HANDLED(limit_))
+      return true;
+    bind_scope_t limit_scope(report, account);
+    return predicate_t(report.HANDLER(limit_).str(), report.what_to_keep())(limit_scope);
+  };
+
   if (account.parent && (account.has_xflags(ACCOUNT_EXT_VISITED) || (!flat && visited > 0) ||
-                         (flat && visited > 0 && to_display == 0) ||
-                         (report.HANDLED(empty) && account.has_flags(ACCOUNT_KNOWN)))) {
+                         (flat && visited > 0 && to_display == 0) || known_empty_admit())) {
     bind_scope_t bound_scope(report, account);
     call_scope_t call_scope(bound_scope);
     if ((!flat && to_display > 1) || (!flat && to_display == 1 && !account.posts.empty()) ||
