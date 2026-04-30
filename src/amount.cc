@@ -955,6 +955,15 @@ void amount_t::in_place_round_to_commodity_precision() {
         set_keep_precision(false);
       return;
     }
+    // A cleared keep_precision flag is a post-condition that we rounded to
+    // a meaningful commodity precision (the #1765 invariant: rounded(x)
+    // must not drift if the commodity widens later).  When comm_prec == 0
+    // there is no such precision to round to, so clearing the flag is
+    // unearned -- it would erase the value's actual fractional content,
+    // making a --basis cost like 20 ETH * `@ $5.025` = $100.500 render
+    // as $100.  Preserve the flag in that case (#3187).
+    if (comm_prec == 0 && keep_precision() && quantity->prec > 0)
+      return;
   }
 
   if (keep_precision()) {
