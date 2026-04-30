@@ -1,5 +1,432 @@
 # Ledger NEWS
 
+## 3.5.0
+
+This is a substantial release representing more than 575 merged pull requests.
+It modernizes the C++ codebase, dramatically expands test coverage, fixes a
+long list of crashes and correctness bugs, and adds several new options,
+directives, and commands.
+
+### Critical Bug Fixes
+
+- Fix many crashes in the Python bindings and embedded interpreter: segfaults
+  in `journal.query()` with `--pivot`, `--account`, or period flags such as
+  `-M` (issues #1193, #1858); use-after-free in Python journal queries (issue
+  #2152); segfaults in `close_journal_files()` when Python holds commodity
+  references (issues #977, #978); a dangling session pointer when ledger is
+  imported as a Python module (#2163); the segfault when `ledger python` was
+  reinitialized in interactive mode; and a stack-smash in the Python optional
+  converter
+
+- Fix null pointer dereferences in `get_code()`, `post_pred` (issue #1219),
+  `apply` directive functions (#1221), and `magnitude()` when a posting has a
+  null amount (#2212)
+
+- Fix dangling context pointers from stack-allocated `bind_scope_t` and from
+  tag-assertion expressions in the journal
+
+- Fix segfault when a posting iterator is invalidated by a remove, when
+  `source_context` encounters very large transactions (#1838), in `find_price`
+  after `close_journal_files()` left the graph index stale, when the `csv`
+  `--dc` format is selected, when `ledger` starts in a non-existent directory,
+  when `--limit` filters a commodity inside `--budget` (#2247), when `--gain
+  --subtotal` visits multi-commodity accounts (#965), when `--sort date` runs
+  with bucket accounts (#3128) or against the balance report (#3126), and when
+  an `=` divider line appears in the journal (#1182)
+
+- Fix assertion failure in `truncate()` with `--payee-width=1`, in
+  `expr_t::compile` for empty expressions (#1899), in `alias()` when a
+  commodity name already exists, on whitespace-only lines in `parse_posts`,
+  and from `--trace` interacting with `include` directives
+
+- Fix buffer overread in the quantity punctuation-stripping loop and add
+  `numeric_cast` guards against narrowing overflows
+
+- Fix infinite recursion with `--unround` and `--group-by` (issue #518) and
+  the infinite loop produced by a self-referential `C` (commodity equivalence)
+  directive (#1065)
+
+- Fix `--invert` to work correctly with composite reports (#1908) and with the
+  `equity` command (#1645)
+
+### Code Modernization
+
+This release migrates the codebase to C++17 and replaces several Boost utility
+components with their standard-library equivalents.
+
+- The build now requires a C++17-capable compiler (GCC 8+, Clang 7+, or MSVC
+  19.14+).  Older toolchains will no longer build
+
+- Boost dependencies are slimmed down.  `boost::filesystem`, `boost::any`, and
+  `boost::variant` are replaced with their `std::` equivalents, and
+  `boost::shared_ptr` use is reduced significantly across the core code.
+  `find_package(Boost ...)`  now requires only `date_time`, `iostreams`, and
+  `regex`, with optional `python`, `nowide`, and `unit_test_framework`.  The
+  minimum Boost version (1.72.0) is unchanged
+
+- Embedders should note that most public headers now traffic in
+  `std::optional`, `std::any`, and `std::variant` rather than their `boost::`
+  counterparts; downstream code that named the Boost types explicitly will
+  need a one-line typedef or search-and-replace
+
+- Adopt C++17 idioms throughout: structured bindings, if-statement
+  initializers, `if constexpr`, compact nested namespaces, `inline static
+  constexpr` class constants, `[[nodiscard]]` and `[[fallthrough]]`
+  attributes, and `std::string_view` on parsing hot paths
+
+- Replace raw `new`/`delete` with `make_shared`/`make_unique`, `BOOST_FOREACH`
+  with range-for, and `throw()` with `noexcept`
+
+- Several memory leaks and a command-injection vector in `getquote` (when
+  commodity symbols contained shell metacharacters) were closed during the
+  security-hardening pass
+
+### Commodity Prices, Lots, and Annotations
+
+- Implement automatic FIFO/LIFO commodity lot matching (issue #164): selling a
+  commodity without an explicit `{cost}` annotation can now pair the sale with
+  open lots automatically and compute gain/loss from the matched basis
+
+- Add `--lots-fifo` and `--lots-lifo` options (which imply `--lot-prices` and
+  `--lot-dates`) to display lots in chronological order
+
+- Fix many issues with lot annotations: preserve lot annotations through
+  commodity reduce/unreduce (#958), in balance assertions with annotated
+  amounts, during balance assignments, and in `print` output; round-trip the
+  fixated cost marker `=` in `print` (#1794); preserve `{{total}}` lot-price
+  notation; preserve user-specified lot dates during transaction finalization;
+  preserve lot price precision when total cost notation is used; derive cost
+  basis from lot price annotations (#630); allow `lot_price`, `lot_date`, and
+  `lot_tag` to accept zero arguments; and use effective dates for lot
+  annotations under `--effective`
+
+- Fix `--lots` with commodity conversion (#512), match lots across computed
+  and typed annotation precision (#524), preserve `--basis` precision when the
+  commodity has none (#3187), and make `--price` report the `@` transaction
+  price rather than the lot basis (#1806)
+
+- Fix transaction balancing for fixated lot prices with two commodities,
+  fixated costs that produce different amounts (#1122), and silently-accepted
+  imbalanced transactions with lot-price annotations
+
+- Fix unrealized gains/losses when multiple prices are recorded on the same
+  day (#1821); add `--plopen` for unrealized P&L on open positions; add
+  `--gain-since` for period-relative gain calculation; account for quantity
+  precision when rounding gain/loss; fix the rounding error in `--price` with
+  `@@` total cost notation; warn when a `getquote` script fails or returns no
+  usable price (#2335); and trigger a price download even when no prior price
+  exists (#652, #655)
+
+- Set commodity precision from price records and let later transactions widen,
+  but not narrow, the recorded precision (#1190, #2481)
+
+- Fix `-V` failing when a lot-annotated cost marks the cost commodity as
+  `PRIMARY` (#1217); fix `-V -M` dropping revaluations in periods without
+  transactions (#2131); fix `-H` with `-X` when a posting predates all price
+  history (#1738); fix duplicate commodity quote downloads (#996); make
+  `--end` exclusive for market-value price lookups (#1762); and walk the
+  larger-unit chain when no direct price is found (#2017)
+
+- Fix `--exchange` (`-X`) for quoted commodities (#2321), the multi-commodity
+  balance conversions in `get_commodity()` (#763) and `nail_down()` (#717),
+  the `C` directive interaction with `-X` (#1066), and
+  crash-when-empty-commodity in `getquote` (#1869)
+
+- Add `--decimal-places` to limit display precision (#797), accept an optional
+  precision argument in `round()` (#628), and add a `--round` option that
+  rounds each posting before aggregation (#781) plus a `--round` option that
+  complements `--unround`
+
+- Allow parenthesized expression prices in `P` directives (#1101), emit
+  pricedb entries in both directions (#779), filter built-in commodities from
+  pricemap output (#738), report all priced commodities in `prices`/`pricedb`
+  (#739), report errors for self-referential price directives, and add
+  `--latest` to `prices`/`pricedb`
+
+- Fix the `D` directive to lock the commodity display format (#1197), apply
+  `D`-directive formatting to bare amounts (#761), and allow apostrophe (`'`)
+  as a digit-group separator
+
+- Add batch commodity quote fetching to amortize the per-call cost (#588); add
+  `--account-value-expr` and `--commodity-value-expr` options for custom
+  valuations; expose a `capital_gain` value expression variable
+
+### Balance, Assertions, and Assignments
+
+- Filter balance assertions by date rather than file order; skip balance
+  assertions on UUID-duplicate transactions; check account assertions on
+  auto-generated postings; respect `--permissive` for balance assignments with
+  elided amounts (#2005)
+
+- Fix balance assertions for accounts with only virtual postings (#1699), with
+  quoted commodities (#904), with per-unit price annotations (#1125), with
+  `--decimal-comma` (#1167), and with zero-difference values (#1168)
+
+- Fix balance assignments across multiple files (#1831); print balance
+  assignments as `= amount` rather than `amount = amount` (#2100); fix
+  balance-assignment alignment in `print`; honor `--effective` date ordering
+  in balance assertions (#2071); and use fixated price annotations for
+  multi-commodity balance checking
+
+### Reporting and Display Improvements
+
+- Optimize the `register` command for a 46% speedup on large journals (≈50K
+  postings: 6.0s → 3.3s on the benchmark) by short-circuiting the trivial
+  `amount` expression, exploiting `strip(A+B) = strip(A)+strip(B)` to maintain
+  a stripped running total, and early-returning from
+  `balance_t::strip_annotations` when nothing carries annotations
+
+- Align multi-commodity balance rows with wide decimals (#1795); fix
+  multi-commodity balance formatting width (#698); make separator lines adapt
+  to `amount_width`; show the payee when it changes between sorted postings;
+  show zero commodity amounts with `--empty` in the balance report (extending
+  #2204); preserve virtual posting flags in `equity` output
+
+- Sort by converted value when `-X` is active (#1556); sort parent accounts by
+  family total (#723); allow `--sort` and `--sort-xacts` together; show the
+  own amount instead of the family total in `--flat` balance mode
+
+- Enable ANSI color on Windows CMD/PowerShell (#2110); fix `justify()` to
+  ignore ANSI escape codes when computing width; flush stdout after each REPL
+  command (#991)
+
+- Fix percentage amounts to act as fractions in arithmetic; fix `width`
+  options to return integers for expression arithmetic; fix the `truncated()`
+  function to work with amounts in value expressions; expose
+  `find_accounts_re()` for full regex-matched account lookup
+
+- Make the `prices -A` (running average) and `--deviation` options affect the
+  displayed price column (#753); honor `--date-format` and `--datetime-format`
+  in `prices`/`pricedb` (#1202); make the `stats` command honor report filters
+  (#742) and use an inclusive day count for single-day journals (#740);
+  exclude future-dated postings from recency statistics (#741); fix bad
+  pricedb info under `--anon` (#756); fix `--anon` balance accumulation
+  (#617); add `--csv-separator` for `convert`; add `--no-group-by` to cancel
+  `--group-by`; fix the misaligned separator dashes in the `cleared` report
+  (#729) and the bold formatting for uncleared posts under `--payee` (#865)
+
+- Add the `--append-format` option (#1740); add `--ignore-diacritics` for
+  accent-insensitive search; add `--pivot-only` to replace the account name
+  with the pivot value (#1153); add `--period-shift` for shifting period
+  boundaries (#954); add `--group-by-cumulative` for balance sheets
+  accumulating over time
+
+### Filtering, Queries, and Aggregation
+
+- Rewrite the query parser as a documented recursive-descent parser with a
+  published EBNF grammar in the header
+
+- Fix `--empty` to respect the query/`--limit` predicate (#3189); preserve
+  backslash escapes in regex patterns; preserve push-command positional query
+  args across REPL commands (#528); fix the query lexer that included trailing
+  whitespace before operators; handle `==` in query metadata predicates
+  (#842); honor `not` in positional queries for `print`/`xact`/`dump` (#1227);
+  evaluate the `expr any()` keyword in single-argument queries (#1185)
+
+- Expand account aliases in CLI query arguments; fix `--pivot` with
+  command-line account queries (#1154), with built-in properties (#1048), and
+  with tag-based grouping (#1042); fix `--group-by` combined with `--pivot`
+  dropping subsequent groups (#1034); fix `--depth` interacting with
+  `--effective` and with `--flat`; fix `--only` so it applies after
+  `calc_posts` and does not alter running totals (#762); compute per-account
+  averages for period reports (#1950); anchor interval averages to the report
+  begin date
+
+### Date, Period, and Time Handling
+
+- Accept a time component for `--begin`/`--end`/`--now` (#1696): the parser
+  detects datetime structurally and accepts `@` as a date/time separator
+
+- Add `%m-%d` as a built-in short date format (#566); accept relative date
+  expressions (`yesterday`, `tomorrow`, `tday`, `yday`, `tmrw`, plus the full
+  period grammar via `on <expr>`) in the `xact` command (#647); recognize
+  `aux`/`aux_date`/`auxdate` aliases for the CSV posted column
+
+- Accept duration units (`s`, `m`, `h`, `d`, `w`) in `--price-exp` /
+  `--leeway` / `-Z` (#607); document that `--price-exp` is in hours by default
+  (#1210); apply month rollback for begin dates without an explicit year; fix
+  `-b MM/DD` to use the most recent past occurrence (#1095); honor
+  `LEDGER_INIT_FILE` and `LEDGER_INIT` environment variables (#1189); fix
+  Windows path expansion on Cygwin (#1188); recognize Windows drive-letter
+  paths in the `include` directive (#1670)
+
+- Resolve `date` to the latest posting date for accounts; expand bracketed
+  dates in notes during `print` (#622); fix `--input-date-format` interaction
+  with `xact`; fix the `--current` option being overridden by `--end`; pin
+  evaluation dates in time-sensitive tests for reproducibility
+
+- Fix `-V -M` revaluations in periods without transactions (#2131); fix
+  `--monthly` prices to show the last price per period (#583); restore the
+  `year_directive_year` when ending an `apply year` directive (#2413); year
+  directive no longer leaks into `xact`/`entry` commands (#707); fix the year
+  directive interaction with price history (#1748); restore year/epoch state
+  after processing included files (#1979)
+
+### Automated Transactions, Forecasting, and Budgets
+
+- Overhaul the forecast feature: forecasts now include the period containing
+  `--now` rather than only emitting strictly-future periods; mixed-frequency
+  periodic transactions (e.g. monthly plus yearly) are ordered correctly;
+  future-dated `from`/`since` and past `until` clauses on periodic
+  transactions behave correctly; `--forecast-while` is respected by both
+  balance and register reports; the 5-year safety limit no longer underflows
+  on current-period dates (closes #591, #1044, #1113, #1141, #1148, #1155,
+  #1161, #1576, #1605, plus crash #2043)
+
+- Add `payee-rewrite` and `account-rewrite` directives (with matching
+  `--payee-rewrite` and `--account-rewrite` CLI flags) that apply regex
+  substitutions to payee and account names at report time without modifying
+  the journal
+
+- Add directives to enable and disable automatic transactions
+
+- Allow `$expr` in automated-transaction account names in addition to
+  `$account`; honor effective dates in automated transactions; fix payee-based
+  `Unknown` account resolution; fix date comparison operators in
+  automated-transaction predicates; include auto-transaction postings in
+  `--related` output (#993)
+
+- Default to monthly for budget periods without an interval; sort postings by
+  date before budget processing (#590); fix budget-report period
+  initialization with account queries (#636); preserve day-of-month for
+  monthly budget periods with a `from` clause; honor start dates for weekly
+  periodic transactions
+
+- Apply payee UUID mappings during CSV import; balance timeclock transactions
+  against the bucket account; pre-register built-in metadata tags so
+  `--strict` no longer warns about them; suppress the spurious `--strict`
+  warning for `$account` in automated transactions (#545)
+
+### CSV Conversion and Imports
+
+- Strip journal-syntax quotes from commodity names in CSV output (#2008); set
+  the parse context during CSV convert to prevent a segfault under `--strict`
+  (#2521); fix the CSV mark in description when a code is present; add
+  `--csv-separator`; honor CSV `aux`/`aux_date`/`auxdate` column aliases for
+  posted dates; fix CSV `convert` cost-field handling (#1110); apply payee
+  UUID mappings during CSV import; fix CSV `convert` handling of missing or
+  same-commodity cost fields; fix signed debit amounts in CSV `convert`;
+  report a clear error for CSV files missing a date column
+
+### Timelog and Time-based Reporting
+
+- Add `--time-round` to round timelog durations to the nearest unit (#1608)
+
+- Fix the `datetime` field to include the time portion for timelog postings
+  (#2264); fix payee sub-directive application to timelog entries (#1211); fix
+  the future check-in error in timelog auto-close (#1689); balance timeclock
+  transactions against the bucket account
+
+- Correct `--time-colon` arithmetic in budget and other computed reports; fix
+  `-X` to convert time values across scale units (#1177)
+
+### Python Bindings
+
+- Allow `ledger` to be loaded as a Python extension module (#513); install the
+  Python module with executable permissions (#531); add `--python-home` and
+  `--python-version` to `acprep`; document how to build the Python bindings;
+  fix the Homebrew build with Python support (#2267)
+
+- Make `xacts`/`posts` iterable as Python properties (#682); fix Python
+  `xact.posts` to return only raw postings (#2453); enable `Commodity ==
+  string` comparison in Python (#759); expose `display_amounts` on
+  `PostCollectorWrapper` for commodity exchange (#2158); fix Python
+  `FileInfo.filename` and `FileInfo.modtime` access (#1205); fix
+  `Session.read_journal()` to accept a string path; reset journal state before
+  re-reading from Python; expose `price_point_t` to the Python bindings
+
+- Fix Python bindings for virtual posting flag detection (#2169) by binding to
+  the correct `supports_flags<uint_least16_t>` instantiation; fix Python
+  `TypeError` when accessing `boost::optional` fields like `note`; use checked
+  utfcpp functions for Python string conversion; restore terminal settings
+  after `ledger python` exits (#774)
+
+### New Commands and Directives
+
+- Add `payee-rewrite` and `account-rewrite` directives for report-time
+  transformation
+
+- Add directives to enable and disable automatic transactions
+
+- Support nested `account` declarations (#877) and metadata tags on `account`
+  directives (#1681)
+
+- Return regex capture-group text from the `=~` operator (extending #664)
+
+### Documentation
+
+- Major overhaul of the manual: rewrite of the Value Expressions chapter with
+  a full language reference and runnable doctests (#804); document
+  `display_amount`, `display_total`, and `value_date`; expand the value
+  expression reference with previously-undocumented keywords; document the
+  expression engine, time, and query layer (Session 3); document the core data
+  model, journal model, and build infrastructure; document the filter pipeline
+
+- Add real-world examples for tax year grouping with `--pivot`, recording
+  stock dividends, sales-tax automated transactions, and tag-filtering in the
+  Metadata section (#1117); document account date checks for closing accounts
+  (#1643); document `account("name").total` for automated transactions; fix
+  the outdated documentation for single-letter value expression variables
+  (#994), the contradictory documentation for `--price-db` and `--download`
+  (#1210), and the `ansify_if` two-argument signature; remove documentation
+  for the unimplemented `capture` directive
+
+### Build System
+
+- Switch the default branch from `master` to `main`
+
+- Add `gpgmepp` (the C++ binding for GPGME) as a build dependency when
+  GPG/MIME support is enabled.  Builds without `-DUSE_GPGME=ON` are unaffected
+
+- Drop the legacy AppVeyor pipeline in favor of a GitHub Actions MSYS2/UCRT64
+  Windows build (#1791); MSYS2/UCRT64 is now the supported Windows toolchain
+
+- Add CPack `.deb` and `.rpm` package generators (`make package`)
+
+- Set up `clangd` for LSP-based development; add a `lint` CMake target driving
+  `clang-format`, `clang-tidy`, and `cppcheck`; add `lefthook` so the same
+  configure/build/ctest/doxygen pipeline runs locally and in CI; show the
+  build type (`Debug`/`Release`) in `--version` output
+
+- Improve PCH configuration and trim `system.hh` bloat; fix `CMAKE_BUILD_TYPE`
+  declared as `BOOL` instead of `STRING`; fix ICU include path and sysroot
+  clearing for Nix re-runs; build the `doc` target by default when
+  `BUILD_DOCS` is `ON`; update bundled `utfcpp` to 4.0.9; add explicit
+  `CMAKE_OSX_SYSROOT` for reproducible macOS builds; add code-coverage tools
+  to the Nix development environment
+
+### Testing and Coverage
+
+- Add 419 new regression tests, raising source-code coverage to 89.6%, and
+  lift the CI coverage gate to 90% (#2832, #2728); add regression tests for
+  153 previously-uncovered open issues (#3011)
+
+- Add a libFuzzer harness for the journal parser, run nightly in CI; add an
+  ASan/UBSan sanitizer build to the CI matrix; add Clang-based performance
+  regression checks; add gcov/lcov code coverage reporting; free disk space
+  and shrink coverage profraw footprint to keep the coverage job within runner
+  limits
+
+- Add a snapshot behavioral testing tool; harden the Python test harness for
+  Python 3 correctness; remove the 4096-byte line length limit in the parser
+
+### Codebase Architecture
+
+- Split `textual.cc` into `textual.cc`, `textual_directives.cc`, and
+  `textual_xacts.cc` along responsibility boundaries, with a shared
+  `textual_internal.h`
+
+- Rewrite the query parser as a documented recursive-descent parser with
+  structured control flow
+
+- Apply `clang-format` to the entire C++ codebase; enforce formatting in CI
+  (#2499); reformat several header files for readability
+
+- Refactor a `compute_balance_diff` helper to eliminate duplication; convert
+  nested namespaces and template specializations to compact C++17 forms;
+  update the fuzzer to use `std::filesystem` after the boost::filesystem
+  migration
+
 ## 3.4.1
 
 - Fix version number in binary
