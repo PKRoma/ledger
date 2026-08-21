@@ -1,0 +1,179 @@
+; Regression test for issue #3252: mixed notes with dates no longer works.
+;
+; A `[date]` / `[=auxdate]` directive written *after* free-form note text
+; -- "; Returned Clothes [2026/01/01]" -- has always overridden the item's
+; date.  The #3192 fix, which stopped a bracketed date appearing as a
+; metadata *value* from silently moving the item, went too far: it required
+; the bracket to be the very first token of the comment, which broke the
+; long-standing mixed note-and-date form.
+;
+; The rule restored here is the one every released version enforced, minus
+; only what #1644 and #1968 had to relax: the bracketed date is a directive
+; while no colon precedes it.  Past a colon the metadata parser may own the
+; text -- a `Key:` / `Key::` setting claims the rest of the line as its
+; value, a `:tag:` series claims its token -- so the brackets are left
+; alone there.
+
+; --- The case from the issue: note plus actual date on the transaction line.
+; Both postings must report 26-Jan-01, and the posting's own `:refund:` tag
+; must still be parsed.
+
+2026/01/01 * Department Store        ; Bought Clothes
+    Expenses:Clothing              $100.00
+    Assets:Checking
+2026/02/01 * Department Store        ; Returned Clothes [2026/01/01]
+    Expenses:Clothing             -$100.00          ; :refund:
+    Assets:Checking
+
+test reg ^Expenses:Clothing
+26-Jan-01 Department Store      Expenses:Clothing           $100.00      $100.00
+26-Jan-01 Department Store      Expenses:Clothing          $-100.00            0
+end test
+
+test reg --limit "has_tag('refund')" ^Expenses:Clothing
+26-Jan-01 Department Store      Expenses:Clothing          $-100.00     $-100.00
+end test
+
+; --- The same form with an effective date, also on the transaction line.
+
+2026/02/01 * Mail Order              ; Shipped late [=2026/01/05]
+    Expenses:Shipping                $10.00
+    Assets:Checking
+
+test reg ^Expenses:Shipping
+26-Feb-01 Mail Order            Expenses:Shipping            $10.00       $10.00
+end test
+
+test reg --effective ^Expenses:Shipping
+26-Jan-05 Mail Order            Expenses:Shipping            $10.00       $10.00
+end test
+
+; --- The same forms on a posting comment rather than the transaction line.
+
+2026/03/01 * Office Supply
+    Expenses:Office:Actual           $20.00  ; ordered in February [2026/02/20]
+    Expenses:Office:Aux              $30.00  ; billed in March [=2026/03/20]
+    Assets:Checking
+
+test reg ^Expenses:Office
+26-Feb-20 Office Supply         Expenses:Office:Actual       $20.00       $20.00
+26-Mar-01 Office Supply         Expenses:Office:Aux          $30.00       $50.00
+end test
+
+test reg --effective ^Expenses:Office
+26-Feb-20 Office Supply         Expenses:Office:Actual       $20.00       $20.00
+26-Mar-20 Office Supply         Expenses:Office:Aux          $30.00       $50.00
+end test
+
+; --- A bracketed date on a note line of its own keeps working, as does the
+; documented leading-bracket notation, and the combined `[actual=auxdate]`
+; form written after note text.
+
+2026/04/01 * Split Note
+    Expenses:Notes                   $40.00
+    ; paid ahead [=2026/03/15]
+    Assets:Checking
+
+2026/04/02 * Leading Bracket
+    Expenses:Leading                 $50.00  ; [=2026/03/16]
+    Assets:Checking
+
+2026/04/03 * Both Dates
+    Expenses:Both                    $60.00  ; wrote check [2026/03/17=2026/03/18]
+    Assets:Checking
+
+test reg ^Expenses:Notes or ^Expenses:Leading or ^Expenses:Both
+26-Apr-01 Split Note            Expenses:Notes               $40.00       $40.00
+26-Apr-02 Leading Bracket       Expenses:Leading             $50.00       $90.00
+26-Mar-17 Both Dates            Expenses:Both                $60.00      $150.00
+end test
+
+test reg --effective ^Expenses:Notes or ^Expenses:Leading or ^Expenses:Both
+26-Mar-15 Split Note            Expenses:Notes               $40.00       $40.00
+26-Mar-16 Leading Bracket       Expenses:Leading             $50.00       $90.00
+26-Mar-18 Both Dates            Expenses:Both                $60.00      $150.00
+end test
+
+; --- A comment that opens with a metadata setting keeps its brackets as a
+; value: neither the actual nor the effective date may move (#3192).
+
+2026/05/01 * Typed Metadata
+    Expenses:Typed                   $70.00  ; Due:: [2026/04/20]
+    Assets:Checking
+
+2026/05/02 * String Metadata
+    Expenses:String                  $80.00  ; Due: [2026/04/21]
+    Assets:Checking
+
+test reg --effective ^Expenses:Typed or ^Expenses:String
+26-May-01 Typed Metadata        Expenses:Typed               $70.00       $70.00
+26-May-02 String Metadata       Expenses:String              $80.00      $150.00
+end test
+
+test reg --format "%(account) %(format_date(tag('Due'), '%Y-%m-%d'))\n" ^Expenses:Typed
+Expenses:Typed 2026-04-20
+end test
+
+test reg --format "%(account) %(tag('Due'))\n" ^Expenses:String
+Expenses:String [2026/04/21]
+end test
+
+; --- Any other colon ahead of the bracket suppresses the directive too,
+; exactly as every released version did.  A `:tag:` series, a clock time and
+; a URL all leave the transaction's own date in place -- and a bracketed
+; non-date behind a colon must stay harmless rather than aborting the parse.
+
+2026/06/01 * Tag Series
+    Expenses:Colon:Tag               $90.00  ; :vacation: notes [2026/05/10]
+    Assets:Checking
+
+2026/06/02 * Clock Time
+    Expenses:Colon:Time             $100.00  ; meeting at 10:30 [2026/05/11]
+    Assets:Checking
+
+2026/06/03 * Web Link
+    Expenses:Colon:Url              $110.00  ; see http://example.com [2026/05/12]
+    Assets:Checking
+
+2026/06/04 * Reference Number
+    Expenses:Colon:Ref              $120.00  ; :receipt: scan [1234]
+    Assets:Checking
+
+test reg --effective ^Expenses:Colon
+26-Jun-01 Tag Series            Expenses:Colon:Tag           $90.00       $90.00
+26-Jun-02 Clock Time            Expenses:Colon:Time         $100.00      $190.00
+26-Jun-03 Web Link              Expenses:Colon:Url          $110.00      $300.00
+26-Jun-04 Reference Number      Expenses:Colon:Ref          $120.00      $420.00
+end test
+
+test reg --limit "has_tag('vacation')" ^Expenses:Colon
+26-Jun-01 Tag Series            Expenses:Colon:Tag           $90.00       $90.00
+end test
+
+; --- Writing the date ahead of the tags is what makes both work; this is
+; the shape #1644 and #1968 restored, and it must keep working.
+
+2026/07/01 * Date First
+    Expenses:DateFirst              $130.00  ; [2026/06/10] :refund:
+    Assets:Checking
+
+test reg --limit "has_tag('refund')" ^Expenses:DateFirst
+26-Jun-10 Date First            Expenses:DateFirst          $130.00      $130.00
+end test
+
+; --- Only the first bracketed group of a comment is considered, and an
+; unclosed bracket is not a directive at all; both keep the transaction's
+; own date.
+
+2026/07/02 * Nested Bracket
+    Expenses:Nested                 $140.00  ; Returned [store] clothes [2026/06/11]
+    Assets:Checking
+
+2026/07/03 * Unclosed Bracket
+    Expenses:Unclosed               $150.00  ; note [2026 with no close
+    Assets:Checking
+
+test reg ^Expenses:Nested or ^Expenses:Unclosed
+26-Jul-02 Nested Bracket        Expenses:Nested             $140.00      $140.00
+26-Jul-03 Unclosed Bracket      Expenses:Unclosed           $150.00      $290.00
+end test

@@ -232,10 +232,13 @@ public:
    * @brief Parse metadata tags from a comment line.
    *
    * In addition to the `:tag:` and `Key:` / `Key::` forms handled by
-   * metadata_t, item_t recognizes a leading `[date]` or `[date=auxdate]`
+   * metadata_t, item_t recognizes a `[date]` or `[date=auxdate]`
    * bracketed override that updates this item's primary and/or auxiliary
-   * date.  Accounts do not have dates and therefore inherit
-   * metadata_t::parse_metadata_tags directly.
+   * date.  The override is the first bracketed group of the comment and
+   * may follow free-form note text, but only while no colon precedes it:
+   * past a colon the metadata parser may own the text, as it does for the
+   * value of a `Key:` / `Key::` setting.  Accounts do not have dates and
+   * therefore inherit metadata_t::parse_metadata_tags directly.
    *
    * @param p                  Raw comment text (without the leading `;`).
    * @param scope              Scope for evaluating `Key::` expressions.

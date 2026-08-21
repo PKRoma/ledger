@@ -4601,6 +4601,27 @@ $ ledger --effective register Groceries
 09-Mar-01 Bountiful Blessings.. Expense:Food:Groceries      $ 37.50     $ 225.00
 @end smallexample
 
+The bracketed date need not stand alone in the comment.  It may follow
+ordinary note text, so that a posting or transaction can be annotated and
+dated at once:
+
+@smallexample @c input:validate
+2026/02/01 * Department Store        ; Returned clothes [2026/01/01]
+    Expenses:Clothing               $-100.00
+    Assets:Checking
+@end smallexample
+
+@noindent
+It must, however, be the first bracketed group in the comment, and no
+colon may precede it.  Past a colon the text may belong to the metadata
+parser rather than to the note: a @samp{Key:} or @samp{Key::} setting
+claims the remainder of the line as that tag's value (@pxref{Metadata
+values}), so @samp{; Due:: [2026/01/01]} records a date value for the
+@samp{Due} tag and leaves the item's own dates untouched.  The same holds
+for a comment such as @samp{; :refund: [2026/01/01]}, where the brackets
+follow a @samp{:tag:} series.  Write the date first ---
+@samp{; [2026/01/01] :refund:} --- when you want both.
+
 Note that the @option{--aux-date} option is an alias for
 @option{--effective}; for a brief explanation of auxiliary date
 @pxref{Auxiliary dates}.

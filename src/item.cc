@@ -58,9 +58,9 @@ bool item_t::use_aux_date = false;
 /*----------------------------------------------------------------------*/
 /*  Tag Parsing (date extension)                                        */
 /*                                                                      */
-/*  Items extend the base parser with a leading bracketed-date form     */
-/*  `[date]` or `[date=auxdate]`.  Everything else is delegated to      */
-/*  metadata_t::parse_metadata_tags.                                    */
+/*  Items extend the base parser with a bracketed-date form `[date]`    */
+/*  or `[date=auxdate]`, recognized while no colon precedes it.         */
+/*  Everything else is delegated to metadata_t::parse_metadata_tags.    */
 /*----------------------------------------------------------------------*/
 
 void item_t::parse_tags(const char* p, scope_t& scope, bool overwrite_existing) {
@@ -71,25 +71,36 @@ void item_t::parse_tags(const char* p, scope_t& scope, bool overwrite_existing) 
   while (*d == ' ' || *d == '\t' || *d == ';')
     ++d;
 
-  // Only treat `[date]` / `[=auxdate]` as a date directive when it is the
-  // first non-whitespace, non-`;` token of the comment.  A bracketed date
-  // appearing later in the line (e.g. as a value within typed metadata
-  // such as `; Due:: [2024/01/01]`) is a value, not a directive (#3192).
-  if (*d == '[' && (std::isdigit(static_cast<unsigned char>(*(d + 1))) || *(d + 1) == '=')) {
-    const char* e = std::strchr(d, ']');
-    char buf[256];
-    // A span that does not fit is far too long to be a date, and copying it
-    // would overrun the buffer.
-    if (e && static_cast<std::size_t>(e - d - 1) < sizeof(buf)) {
-      std::strncpy(buf, d + 1, static_cast<std::size_t>(e - d - 1));
-      buf[e - d - 1] = '\0';
+  // `[date]` / `[=auxdate]` is a date directive only while no colon precedes
+  // it in the comment.  A colon means the metadata parser may own the text
+  // the bracket sits in: a leading `Key:` / `Key::` setting claims the rest
+  // of the line as that tag's value, so `; Due:: [2024/01/01]` records a
+  // value and leaves the dates alone (#3192), and a `:tag:` series claims
+  // its own token.  Everything ahead of the first colon is plain note text,
+  // where a trailing bracketed date has always moved the item -- as in
+  // `; Returned clothes [2026/01/01]` (#3252).
+  //
+  // Before #1644 and #1968 a colon *anywhere* in the comment disabled the
+  // directive, which broke the documented `; [=date] :tag:` forms; only the
+  // text preceding the bracket is consulted now.
+  if (const char* b = std::strchr(d, '[')) {
+    if ((std::isdigit(static_cast<unsigned char>(*(b + 1))) || *(b + 1) == '=') &&
+        !std::memchr(d, ':', static_cast<std::size_t>(b - d))) {
+      const char* e = std::strchr(b, ']');
+      char buf[256];
+      // A span that does not fit is far too long to be a date, and copying
+      // it would overrun the buffer.
+      if (e && static_cast<std::size_t>(e - b - 1) < sizeof(buf)) {
+        std::strncpy(buf, b + 1, static_cast<std::size_t>(e - b - 1));
+        buf[e - b - 1] = '\0';
 
-      if (char* pp = std::strchr(buf, '=')) {
-        *pp++ = '\0';
-        _date_aux = parse_date(pp);
+        if (char* pp = std::strchr(buf, '=')) {
+          *pp++ = '\0';
+          _date_aux = parse_date(pp);
+        }
+        if (buf[0])
+          _date = parse_date(buf);
       }
-      if (buf[0])
-        _date = parse_date(buf);
     }
   }
 
