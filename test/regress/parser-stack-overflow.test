@@ -1,0 +1,20 @@
+; Regression test: stack overflow via deeply nested parentheses in
+; expression-parsing directives.
+;
+; The recursive descent parser in parser.cc recurses through 15 stack
+; frames per parenthesis nesting level with no depth limit.  A deeply
+; nested expression exhausts the default 8 MB stack, causing SIGSEGV.
+;
+; Before the fix, this crashed with SIGSEGV (exit 139).
+; After the fix, it exits cleanly with a parse error (exit 1).
+
+!assert (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+test bal -> 1
+__ERROR__
+While parsing file "$FILE", line 11:
+While parsing value expression:
+  (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+                                                                                                                                  ^
+Error: Expression nesting depth limit exceeded
+end test

@@ -98,6 +98,9 @@ namespace ledger {
 class expr_t::parser_t : public noncopyable {
   mutable token_t lookahead;  ///< Single-token lookahead buffer
   mutable bool use_lookahead; ///< True if lookahead holds an unconsumed token
+  // Current parenthesis nesting depth
+  mutable unsigned int parse_depth = 0;
+  static constexpr unsigned int MAX_PARSE_DEPTH = 128;
 
   /**
    * @brief Advance to the next token, or reuse the lookahead if pushed back.

@@ -1,0 +1,28 @@
+; Regression test: use-after-free when a transaction with a deferred
+; posting is rejected during finalization.
+;
+; A transaction containing a deferred posting (<Account>) and a virtual
+; posting with no amount causes finalize() to throw balance_error.
+; The destructor frees the deferred posting but did not remove it from
+; the account's deferred_posts map, leaving a dangling pointer that
+; apply_deferred_posts() later dereferenced.
+;
+; Before the fix, this crashed with SIGSEGV (exit 139).
+; After the fix, it exits cleanly with a parse error (exit 1).
+
+2024/01/01 Trigger Transaction
+    ; UUID: poc-uuid-0001
+    <Assets:Checking>      $100
+    Expenses:Food
+    (Misc)
+
+2024/01/01 Second Transaction
+    ; UUID: poc-uuid-0001
+    <Assets:Checking>      $50
+    Income               $-50
+
+test bal -> 1
+__ERROR__
+While parsing file "$FILE", line 17:
+Error: There cannot be null amounts after balancing a transaction
+end test

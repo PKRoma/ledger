@@ -87,7 +87,10 @@ expr_t::ptr_op_t expr_t::parser_t::parse_value_term(std::istream& in,
   }
 
   case token_t::LPAREN:
+    if (++parse_depth > MAX_PARSE_DEPTH)
+      throw_(parse_error, _("Expression nesting depth limit exceeded"));
     node = parse_value_expr(in, tflags.plus_flags(PARSE_PARTIAL).minus_flags(PARSE_SINGLE));
+    --parse_depth;
     tok = next_token(in, tflags, token_t::RPAREN);
     break;
 

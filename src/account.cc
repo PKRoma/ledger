@@ -243,6 +243,12 @@ bool account_t::remove_post(post_t* post) {
   posts.remove(post);
   post->account = nullptr;
 
+  if (deferred_posts) {
+    for (auto& pair : *deferred_posts) {
+      pair.second.remove(post);
+    }
+  }
+
   // Invalidate cached iterators
   if (xdata_) {
     xdata_->self_details.last_post = none;
