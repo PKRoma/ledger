@@ -6448,7 +6448,7 @@ Posts this month
 @command{select query}
 The Command @command{select query} allows generation of SQL-like queries, e.g.,
 
-List all postings matching the qurty.
+List all postings matching the query.
 This command allows to generate SQL-like queries, e.g.:
 
 @smallexample
