@@ -1,6 +1,40 @@
 {
   "nodes": {
+    "ledger-semantics": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1787823899,
+        "narHash": "sha256-YNPHJXn09PB4KSePVHgBIbx0klVkWGutwDnTZNb7k2c=",
+        "owner": "ledger",
+        "repo": "ledger-semantics",
+        "rev": "03abb3e91cf2cfbe2c77ff32ac2428e516458cd9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ledger",
+        "repo": "ledger-semantics",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
+      "locked": {
+        "lastModified": 1787135253,
+        "narHash": "sha256-RD2kNWCG+Bjo6h+JVjWVNntZs2GtRoeY2xHjts/FNkA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ffb3c9b700e759be2ef13237c9d8f953b32a1e46",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ffb3c9b700e759be2ef13237c9d8f953b32a1e46",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
       "locked": {
         "lastModified": 1772736753,
         "narHash": "sha256-au/m3+EuBLoSzWUCb64a/MZq6QUtOV8oC0D9tY2scPQ=",
@@ -18,7 +52,8 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "ledger-semantics": "ledger-semantics",
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },

@@ -5,9 +5,17 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # The machine-checked semantics and its bisimulation oracle (see
+    # the bisimulation section of lean/README.md).  The same repository is also
+    # the `lean/` git submodule, which serves interactive development
+    # (`nix develop ./lean`, warm .lake caches, ctest against a
+    # checkout).  Two pins therefore exist: this flake input drives
+    # `nix build` and CI, the submodule drives the working tree.
+    # Update them together.
+    ledger-semantics.url = "github:ledger/ledger-semantics";
   };
 
-  outputs = { self, nixpkgs }: let
+  outputs = { self, nixpkgs, ledger-semantics }: let
     usePython = true;
     gpgmeSupport = true;
     useLibedit = true;
@@ -19,6 +27,9 @@
 
     packages = forAllSystems (system: let
         pkgs = nixpkgsFor.${system};
+        # The oracle and its exact Lean toolchain come from the
+        # ledger-semantics flake; nothing Lean-specific is built here.
+        semantics = ledger-semantics.packages.${system};
       in with pkgs; {
       ledger = stdenv.mkDerivation {
         pname = "ledger";
@@ -49,6 +60,33 @@
         ];
 
         enableParallelBuilding = true;
+
+        # The check phase replays every positive suite test against the
+        # Lean oracle (ctest SemanticBisimulation): `lake` must be on
+        # PATH and LEDGER_LEAN_DIR must point at the compiled oracle
+        # tree.  LEDGER_LEAN_DIR is a plain env attribute so that it is
+        # visible at CMake configure time too, which is what registers
+        # the test (test/CMakeLists.txt); without oracle and toolchain
+        # the test is not registered, and a registered test without
+        # them exits 77 and shows as SKIPPED — never as a silent pass.
+        nativeCheckInputs = [ semantics.lean git ];
+
+        LEDGER_LEAN_DIR = semantics.oracle;
+        # The semantics revision under comparison, recorded in the
+        # result artifact (the store-path oracle has no repository to
+        # ask).  Absent only when the input is a dirty local override.
+        LEDGER_LEAN_REV = ledger-semantics.rev or "dirty";
+
+        # Lake validates the oracle's dependencies through git; the
+        # store-owned tree needs the ownership check quieted.  Lake
+        # also consults HOME for configuration, and the sandbox's
+        # default is not writable.
+        preCheck = ''
+          export HOME="$TMPDIR"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=safe.directory
+          export GIT_CONFIG_VALUE_0="*"
+        '';
 
         cmakeFlags = [
           "-DCMAKE_INSTALL_LIBDIR=lib"
@@ -92,6 +130,14 @@
 
     defaultPackage = forAllSystems (system: self.packages.${system}.ledger);
 
+    # `nix flake check` (and CI) builds the ledger, whose check phase
+    # runs the full ctest suite including SemanticBisimulation.  The
+    # oracle itself is checked upstream, in the ledger-semantics
+    # flake's own CI.
+    checks = forAllSystems (system: {
+      ledger = self.packages.${system}.ledger;
+    });
+
     devShells = forAllSystems (system: let
         pkgs = nixpkgsFor.${system};
         # Build Boost with Python support, matching exactly what the ledger
@@ -112,6 +158,9 @@
           llvmPackages_18.clang-tools # Provides clang-format (pinned to match CI)
           llvmPackages_18.clang       # Clang compiler for profiling builds
           llvmPackages_18.llvm        # Provides llvm-profdata, llvm-cov
+          ledger-semantics.packages.${system}.lean
+                                      # Lean toolchain for the oracle,
+                                      # pinned by the semantics flake
           hyperfine                   # Statistical benchmarking
           cppcheck
           doxygen                     # API documentation generator

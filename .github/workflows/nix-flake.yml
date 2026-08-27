@@ -20,8 +20,38 @@ jobs:
 
     - uses: actions/checkout@v7
 
+    # Cache the nix store between runs: the semantic-bisimulation
+    # oracle depends on a multi-gigabyte Mathlib artifact tree (the
+    # ledger-semantics flake's `deps` fixed-output derivation) that
+    # would otherwise be re-fetched on every run.  flake.lock pins the
+    # semantics revision, so the key follows every Lean upgrade.
+    # GitHub grants a repository 10 GB of Actions cache in total, so
+    # only one leg gets the cache; two stores of this size would evict
+    # each other (and every other cache in the repository) on every
+    # alternation.  The macOS leg re-fetches the fixed-output
+    # derivation each run instead, which costs minutes, not
+    # correctness.
+    - uses: nix-community/cache-nix-action@v6
+      if: runner.os == 'Linux'
+      with:
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-
+        gc-max-store-size-linux: 8G
+        purge: true
+        purge-prefixes: nix-${{ runner.os }}-
+        purge-created: 0
+        purge-primary-key: never
+
     - name: Install lefthook
       run: npm install -g lefthook
 
-    - name: Ensure nix flake builds
+    # `nix build .` builds the C++ ledger AND runs its full ctest
+    # suite in the check phase — including SemanticBisimulation, which
+    # replays every positive test journal against the Lean oracle
+    # (test/semantic/check_all.py).  The oracle and its toolchain come
+    # from the ledger-semantics flake input (its deps and oracle
+    # packages), so this job
+    # is the CI gate for the bisimulation: any balance divergence
+    # between the C++ implementation and the Lean semantics fails it.
+    - name: Ensure nix flake builds (includes Lean bisimulation)
       run: lefthook run nix-flake-build
