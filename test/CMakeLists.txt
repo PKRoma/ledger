@@ -41,6 +41,51 @@ add_subdirectory(manual)
 add_subdirectory(baseline)
 add_subdirectory(regress)
 
+# Semantic bisimulation (lean/README.md, the ledger-semantics
+# submodule): every
+# positive .test journal in baseline/regress/manual is additionally
+# replayed against the Lean oracle whenever the suite runs (`make
+# check`, `make test`, `ctest`).  One batched ctest test rather than
+# per-test oracle invocations: the oracle loads once for the whole
+# corpus.  The test registers only when an oracle can exist: either
+# the lean/ submodule is checked out (development builds) or
+# LEDGER_LEAN_DIR names a prebuilt oracle tree (the Nix build).  A
+# release build from a tarball has neither, registers nothing, and
+# owes its users no Lean toolchain.  A registered test still exits 77
+# and shows as SKIPPED when the toolchain is missing at run time, or
+# when the submodule is checked out but its oracle has never been
+# built — visibly, never as a silent pass.
+if(Python_EXECUTABLE)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/lean/lakefile.lean" OR
+     (DEFINED ENV{LEDGER_LEAN_DIR} AND
+      NOT "$ENV{LEDGER_LEAN_DIR}" STREQUAL ""))
+    add_test(NAME SemanticBisimulation
+      COMMAND ${Python_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/test/semantic/check_all.py
+        --ledger $<TARGET_FILE:ledger> --source ${PROJECT_SOURCE_DIR})
+    # Bake the oracle location seen at configure time into the test,
+    # so the oracle that runs is the one whose presence registered the
+    # test, not whatever happens to be in the environment later.
+    set(_bisim_env "TZ=${Ledger_TEST_TIMEZONE}")
+    if(DEFINED ENV{LEDGER_LEAN_DIR} AND
+       NOT "$ENV{LEDGER_LEAN_DIR}" STREQUAL "")
+      list(APPEND _bisim_env "LEDGER_LEAN_DIR=$ENV{LEDGER_LEAN_DIR}")
+    endif()
+    if(DEFINED ENV{LEDGER_LEAN_REV} AND
+       NOT "$ENV{LEDGER_LEAN_REV}" STREQUAL "")
+      list(APPEND _bisim_env "LEDGER_LEAN_REV=$ENV{LEDGER_LEAN_REV}")
+    endif()
+    set_tests_properties(SemanticBisimulation PROPERTIES
+      ENVIRONMENT "${_bisim_env}"
+      SKIP_RETURN_CODE 77
+      TIMEOUT 3600)
+  else()
+    message(STATUS
+      "SemanticBisimulation: not registered (lean/ submodule not "
+      "initialized and LEDGER_LEAN_DIR unset)")
+  endif()
+endif()
+
 if(Python_EXECUTABLE)
   set(_class DocTests)
   file(GLOB ${_class}_TESTS ${PROJECT_SOURCE_DIR}/doc/*.texi)
