@@ -31,7 +31,7 @@ jobs:
     # alternation.  The macOS leg re-fetches the fixed-output
     # derivation each run instead, which costs minutes, not
     # correctness.
-    - uses: nix-community/cache-nix-action@v6
+    - uses: nix-community/cache-nix-action@v7
       if: runner.os == 'Linux'
       with:
         primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
